@@ -1,0 +1,22 @@
+[project]
+name = "freshem-3d-interpolation"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "black>=26.3.1",
+    "fastparquet>=2026.3.0",
+    "geopandas>=1.1.3",
+    "ipykernel>=7.2.0",
+    "matplotlib>=3.10.9",
+    "netcdf4>=1.7.4",
+    "pandas>=3.0.2",
+    "pyarrow>=24.0.0",
+    "pyyaml>=6.0.3",
+    "rasterio>=1.4.4",
+    "ruff>=0.15.12",
+    "scipy>=1.17.1",
+    "xarray>=2026.4.0",
+    "zarr>=3.1.6",
+]

@@ -1,0 +1,12 @@
+name: test
+
+#paths
+dir_base: "c:/WERK/DATA/FRESHEM/Interpolation"
+dir_input: "Zeeland test data"
+
+#files
+data_input: "LCI_Sharp_MOD_inv.xyz"
+
+#things
+cell_size_xy: 100
+cell_size_z: 1
