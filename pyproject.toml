@@ -1,3 +1,11 @@
+
+[tool.black]
+line-length = 120
+
+[tool.ruff]
+line-length = 120
+
+
 [project]
 name = "freshem-3d-interpolation"
 version = "0.1.0"
@@ -15,8 +23,11 @@ dependencies = [
     "pyarrow>=24.0.0",
     "pyyaml>=6.0.3",
     "rasterio>=1.4.4",
+    "rioxarray>=0.19.0",
     "ruff>=0.15.12",
+    "scikit-learn>=1.8.0",
     "scipy>=1.17.1",
+    "seaborn>=0.13.2",
     "xarray>=2026.4.0",
     "zarr>=3.1.6",
 ]

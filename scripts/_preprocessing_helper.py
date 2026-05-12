@@ -1,55 +1,60 @@
 import numpy as np
+from scipy.spatial import cKDTree
 import pandas as pd
 
-def snap_to_center_grid(v, step):
-    # returns the nearest grid-center at/below v
-    phase = step / 2
-    return phase + np.floor((v - phase) / step) * step
 
-def snap_to_center_grid_up(v, step):
-    # returns the nearest grid-center at/above v
-    phase = step / 2
-    return phase + np.ceil((v - phase) / step) * step
+def min_max_to_cell_centers(vmin, vmax, step):
 
-def snap_index_regular(values, x):
-    """Return nearest index on a regular 1D grid."""
-    values = values.to_numpy()
-    x = x.values
-    idx = np.rint((values - x[0]) / (x[1] - x[0])).astype(np.int32)
-    return np.clip(idx, 0, len(x) - 1)
+    # k values for cell edges are from floor(vmin/step) to ceil(vmax/step)
+    kmin = np.floor(vmin / step)
+    kmax = np.ceil(vmax / step) - 1
+
+    # k values for cell centers are from kmin to kmax (inclusive)
+    k = np.arange(kmin, kmax + 1)
+
+    # cell centers are at k*step + step/2
+    centers = k * step + step / 2
+
+    return centers
 
 
-def interval_to_iz_centers_increasing(z_centers, z_top, z_bot):
+def idw_to_grid(xp, yp, vp, xg, yg, k=12, p=2.0, eps=1e-12):
     """
-    Inclusive iz range such that z_centers[iz] lies within [min(top,bot), max(top,bot)].
-    Assumes z_centers strictly increasing.
+    Interpoleer punten (xp,yp,vp) naar grid (xg,yg) met kNN-IDW.
+    xg, yg zijn 1D arrays (ds['x'], ds['y']).
     """
-    zc = np.asarray(z_centers.values, dtype=float)
-    lo = np.minimum(z_top.to_numpy(), z_bot.to_numpy())
-    hi = np.maximum(z_top.to_numpy(), z_bot.to_numpy())
+    tree = cKDTree(np.c_[xp, yp])
 
-    iz0 = np.searchsorted(zc, lo, side="left")          # first center >= lo
-    iz1 = np.searchsorted(zc, hi, side="right") - 1     # last center <= hi
+    Xg, Yg = np.meshgrid(xg, yg)  # (ny, nx)
+    q = np.c_[Xg.ravel(), Yg.ravel()]  # (ncell, 2)
 
-    # mark empty intervals (no center falls inside)
-    empty = iz0 > iz1
+    dist, idx = tree.query(q, k=k, workers=-1)
+    dist = np.maximum(dist, eps)
 
-    iz0 = np.clip(iz0, 0, len(zc) - 1).astype(np.int32)
-    iz1 = np.clip(iz1, 0, len(zc) - 1).astype(np.int32)
+    w = 1.0 / (dist**p)
+    vv = vp[idx]
 
-    return iz0, iz1, empty
+    out = (w * vv).sum(axis=1) / w.sum(axis=1)
+    return out.reshape(Xg.shape)
 
-def expand_iz(df, iz_top="iz_top", iz_bot="iz_bot", cols_to_repeat=("ix","iy","RHO")):
-    lo = df[iz_top].to_numpy(np.int32)
-    hi = df[iz_bot].to_numpy(np.int32)
 
-    counts = (hi - lo + 1).astype(np.int32)
-    total = int(counts.sum())
+def calc_oblique_geographic_coordinates(x_crds, y_crds, theta_deg):
 
-    out = {c: np.repeat(df[c].to_numpy(), counts) for c in cols_to_repeat}
+    # calculate oblique geographic coordinate (OGC) based on x and y coordinates and angle theta
+    # following the method described in:
+    # Møller et al (2020) "Oblique geographic coordinates as  covariates for digital soil mapping"
+    # https://doi.org/10.5194/soil-6-269-2020
 
-    starts = np.repeat(lo, counts)
-    offsets = np.arange(total, dtype=np.int32) - np.repeat(np.cumsum(counts) - counts, counts)
-    out["iz"] = starts + offsets
+    # theta to radians
+    theta = np.radians(theta_deg)
 
-    return pd.DataFrame(out, copy=False)
+    # see Møller for formulas
+    c = np.hypot(x_crds, y_crds)
+    angle_a2 = theta - np.arctan2(y_crds, x_crds)
+    OGC = c * np.cos(angle_a2)
+
+    # Indien x_crds een Series is, index overnemen
+    if isinstance(x_crds, pd.Series):
+        OGC = pd.Series(OGC, index=x_crds.index)
+
+    return OGC
