@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -11,9 +12,10 @@ import scripts._utils as _utils
 from scripts import _preprocessing_helper, _read_and_write
 
 
-def snap_data_to_grid(cfg):
+def snap_indicator_probs_to_grid(cfg):
 
     t0 = datetime.now()
+    print('\nPREPROCESSING GRIDDED DATA')
 
     # from config
     path_data = cfg["path_preproc_data"]
@@ -29,6 +31,7 @@ def snap_data_to_grid(cfg):
     # read data
     df = _read_and_write.read_table(path_data.with_suffix(".parquet"))
 
+    # ONLY probability columns can be averaged when snapping to grid
     prob_cols = [col for col in df.columns if col.startswith("P(")]
 
     # snap XY to grid centers
@@ -51,6 +54,8 @@ def snap_data_to_grid(cfg):
 
     # flightlines per xy-cell
     df_flightlines = df[["X", "Y", "LINE_NO"]].drop_duplicates()
+    df_flightlines = _utils.df_to_gdf(df_flightlines, crs=df.crs)
+
     df_flightlines.to_parquet(path_flightlines_out.with_suffix(".parquet"))
 
     print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")

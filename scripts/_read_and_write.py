@@ -1,6 +1,7 @@
 from datetime import datetime
+import os
 from pathlib import Path
-
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -11,13 +12,6 @@ def write_dataset(ds, path):
     path = path.with_suffix(".nc")
     path.parent.mkdir(parents=True, exist_ok=True)
     ds.to_netcdf(path)
-
-# def save_dataset_for_arcgis(ds, path):
-#     ds = ds.transpose("z", "y", "x")
-    
-#     path = path.with_suffix(".nc")
-#     path.parent.mkdir(parents=True, exist_ok=True)
-#     ds.to_netcdf(path)
 
 def read_dataset(path):
     path = path.with_suffix(".nc")
@@ -31,13 +25,45 @@ def write_table(data, path):
         # df.to_parquet(path, engine="fastparquet")
 
 def read_table(path):
-    if path.suffix == ".parquet":
-        return pd.read_parquet(path)    
+
+    if path.suffix == ".parquet":    
+        try:
+            # First try reading with geopandas, which can handle geospatial metadata if present
+            data = gpd.read_parquet(path)
+        except Exception:
+            data = pd.read_parquet(path)
+
+    return data   
+
+def ds_to_tiff(ds, dir_output, name):
+    
+
+    os.makedirs(dir_output, exist_ok=True)
+
+    for var in ds.data_vars:
+        da = ds[var]
+
+        da = da.transpose("z", "y", "x")
+
+        da = da.rio.set_spatial_dims(x_dim="x", y_dim="y")
+
+        # da.rio.to_raster(path.with_suffix(f"_{var}.tif"))
+        da = da.astype("float32")
+        da = da.fillna(-9999)
+        da = da.rio.write_nodata(-9999)
+
+        z_vals = ds.z.values
+
+        da.attrs["long_name"] = [f"z={z:.1f} m" for z in z_vals]
+        
+        path = dir_output / f"{name} - {var}.tif"
+        da.rio.to_raster(path)
 
 
 def read_skytem_xyz(cfg):
     """Parse the SkyTEM inversion export, handling AGS (/ LINE_NO) and #HEADERS styles."""
     t0 = datetime.now()
+    print('\nPREPROCESSING DATA')
 
     path_input = cfg["path_input"]
     dir_output = cfg["dir_output"]

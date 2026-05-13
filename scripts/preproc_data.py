@@ -1,13 +1,10 @@
-import os
 from datetime import datetime
 
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 
-from scripts import _preprocessing_helper, _read_and_write
+from scripts import _preprocessing_helper, _read_and_write, _utils
 
 
 def drop_below_doi_and_resample_layers_to_z(df, cfg):
@@ -100,32 +97,67 @@ def drop_below_doi_and_resample_layers_to_z(df, cfg):
     df_z = df_z[["X", "Y", "Z"] + [c for c in df_z.columns if c not in ["X", "Y", "Z"]]]
 
     # Convert to geodataframe
-    df_z = gpd.GeoDataFrame(df_z, geometry=gpd.points_from_xy(df_z["X"], df_z["Y"]), crs=f"EPSG:{epsg}")
+    df_z = _utils.df_to_gdf(df_z, epsg=epsg)
 
     txt = f"...resampled {n_layers:,} layers to {df_z.shape[0]:,} measurements, dropped {n_dropped:,} layers ({(datetime.now() - t0).total_seconds():.2f}s)."
     print(txt)
 
     return df_z
 
+def quantiles_and_indicator_probs(df, cfg):
 
-def calc_indicators(df, cfg):
     from scipy.stats import norm
 
     # from config
     variable_name = cfg["variable_name"]
     inds = np.array(cfg["indicators"])
+    quantiles = np.array(cfg["quantiles"])
     path_df_out = cfg["path_preproc_data"]
 
     t0 = datetime.now()
-    print(f"Calculating indicators for {variable_name}...", end=" ")
+    print(f"Calculating quantiles and indicator probabilities for {variable_name}...", end=" ")
 
-    # Calculate z-scores and probabilities for each indicator
-    z = (inds[None, :] - df[f"{variable_name}"].values[:, None]) / df[f"{variable_name}_STD"].values[:, None]
+    # --- 1) find unique (mu, std) combos
+    mu_col = variable_name
+    sd_col = f"{variable_name}_STD"
+
+    unique = df[[mu_col, sd_col]].drop_duplicates()
+    mu = unique[mu_col].values[:, None]
+    sd = unique[sd_col].values[:, None]
+
+    # --- 2) compute probabilities
+    z = (inds[None, :] - mu) / sd
     p = norm.cdf(z)
 
-    # create dataframe with indicator columns
-    df_probs = pd.DataFrame(p, columns=[f"P({i})" for i in inds])
-    df_out = pd.concat([df, df_probs], axis=1)
+    # handle sd == 0, in which case p should be 0 if inds < mu, 1 if inds > mu
+    mask_zero = (sd.squeeze() == 0)
+    if np.any(mask_zero):
+        p[mask_zero, :] = (inds[None, :] >= mu[mask_zero, 0][:, None]).astype(np.float32)
+
+
+    # --- 3) quantiles using norm.ppf
+    # Q(p) = mu + sd * ppf(p)
+    zq = norm.ppf(quantiles[None, :]).astype(np.float32)          # (1, K)
+    qv = (mu * 1.0 + sd * zq).astype(np.float32)                 # (U, K)
+
+    # Handle sd == 0: all quantiles collapse to mu
+    if np.any(mask_zero):
+        qv[mask_zero, :] = mu[mask_zero, :]
+
+
+    # --- 4) attach results to uniq
+    prob_cols = [f"P({i})" for i in inds]
+    q_cols = [f"Q{int(round(q * 100)):02d}" for q in quantiles]
+
+    unique_out = pd.concat(
+        [unique.reset_index(drop=True),
+         pd.DataFrame(p, columns=prob_cols),
+         pd.DataFrame(qv, columns=q_cols)],
+        axis=1
+    )
+
+    # --- 4) merge back
+    df_out = df.merge(unique_out, on=[mu_col, sd_col], how="left", sort=False)
 
     # save
     _read_and_write.write_table(df_out, path_df_out.with_suffix(".parquet"))
@@ -133,34 +165,3 @@ def calc_indicators(df, cfg):
     print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
 
     return df_out
-
-
-def plotting(df, cfg):
-
-    t0 = datetime.now()
-    print("Plotting...", end=" ")
-
-    # from config
-    dir_plot = cfg["dir_plot"]
-
-    # sample data for histogram plotting
-    n = 10000
-
-    # in case it's a geodataframe, to avoid geometry column issues
-    df = df.drop(columns="geometry", errors="ignore")
-
-    os.makedirs(dir_plot, exist_ok=True)
-    for var in df.columns:
-
-        n_df = df[var].notna().sum()
-        df_plot = df[var].dropna().sample(n=min(n, n_df), random_state=42)
-
-        plt.figure()
-        sns.histplot(df_plot, bins=20, kde=False)
-        plt.title(f"{var}, n={n_df:,}")
-
-        path = dir_plot / f"data - {var}.png"
-        plt.savefig(path, dpi=300, bbox_inches="tight")
-        plt.close()
-
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")

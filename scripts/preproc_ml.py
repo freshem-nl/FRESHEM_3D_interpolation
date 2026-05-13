@@ -8,6 +8,7 @@ from scripts import _preprocessing_helper, _read_and_write
 def OGC(cfg):
 
     t0 = datetime.now()
+    print('\nMACHINE LEARNING INTERPOLATION')
     print("Calculating oblique geographic coordinates (OGC)...", end=" ")
 
     # from config

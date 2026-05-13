@@ -17,66 +17,53 @@ def indicator_probs_to_quantiles(
     indicators = np.asarray(indicators, dtype=np.float32)
     q_levels = np.asarray(q_levels, dtype=np.float32)
 
-    # thresholds with lower and upper bounds included
-    t_ext = np.concatenate([[lower], indicators, [upper]]).astype(np.float32)  # (m+2,)
-    m_ext = t_ext.size  # L
+    # Extend thresholds with hard bounds: t_ext = [lower, t1..tm, upper]
+    t_ext = np.concatenate([[lower], indicators, [upper]]).astype(np.float32)
+    m_ext = t_ext.size 
 
-    # output
+    # output column names: e.g. Q05, Q10, Q25, Q50, Q75, Q90, Q95
     out_cols = [f"{prefix}{int(round(q*100)):02d}" for q in q_levels]
-    out = pd.DataFrame(index=df.index, columns=out_cols, dtype=np.float32)
+    
+    # Read CDF values: shape (n, m)
+    F = df.loc[:, indicator_col_names].to_numpy(dtype=np.float64, copy=False)
 
-    def _process_block(df_block, out_block):
-        # get CDF values as numpy array (n, m)
-        F = df_block[indicator_col_names].to_numpy(dtype=dtype, copy=False)
+    # monotonicity enforcement (can be needed if CDF values are noisy and not perfectly increasing)
+    F = np.maximum.accumulate(F, axis=1)
 
-        # optional monotonicity enforcement (can be needed if CDF values are noisy and not perfectly increasing)
-        if ensure_monotonic:
-            F = np.maximum.accumulate(F, axis=1)
+    # clip to [0,1] for safety
+    F = np.clip(F, 0.0, 1.0)
 
-        # clip to [0,1] for safety (in case of non-monotonicity or other issues)
-        F = np.clip(F, 0.0, 1.0)
+    # extend F with 0 at the left and 1 at the right (n, m+2)
+    n = F.shape[0]
+    F_ext = np.empty((n, F.shape[1] + 2), dtype=dtype)
+    F_ext[:, 0] = 0.0
+    F_ext[:, 1:-1] = F
+    F_ext[:, -1] = 1.0
 
-        # extend F with 0 at the left and 1 at the right (n, m+2)
-        n = F.shape[0]
-        F_ext = np.empty((n, F.shape[1] + 2), dtype=dtype)
-        F_ext[:, 0] = 0.0
-        F_ext[:, 1:-1] = F
-        F_ext[:, -1] = 1.0
+    # Allocate output: (n, k)
+    Q = np.empty((n, q_levels.size), dtype=np.float64)
 
-        # calculate quantiles
-        for j, p in enumerate(q_levels):
-            # indices of bounding indicators in F_ext
-            idx = np.sum(F_ext < p, axis=1).astype(np.int32)
+    # Invert per quantile level p
+    for j, p in enumerate(q_levels):
 
-            # indices of bounding indicators in t_ext
-            lo = np.clip(idx - 1, 0, m_ext - 1)
-            hi = np.clip(idx,     0, m_ext - 1)
+        # Find the first index hi where F_ext >= p (done via counting values < p)
+        hi = np.sum(F_ext < p, axis=1).astype(np.int32) # gives index of upper bracket
+        hi = np.clip(hi, 0, m_ext - 1) # safety clip
+        lo = np.clip(hi - 1, 0, m_ext - 1) # lower bracket is one index below hi, with safety clip at 0
 
-            # corresponding t-values and F-values
-            t_lo = t_ext[lo]
-            t_hi = t_ext[hi]
-            F_lo = F_ext[np.arange(n), lo]
-            F_hi = F_ext[np.arange(n), hi]
+        # Gather brackets
+        t_lo = t_ext[lo] # (n,) lower threshold
+        t_hi = t_ext[hi] #  (n,) upper threshold
+        F_lo = F_ext[np.arange(n), lo] # (n,) CDF value at lower threshold
+        F_hi = F_ext[np.arange(n), hi] #  (n,) CDF value at upper threshold
 
-            # avoid division by zero (flat pieces)
-            denom = (F_hi - F_lo)
-            w = np.where(denom > 0, (p - F_lo) / denom, 0.0).astype(dtype)
+        # Linear interpolation weight; handle flat segments safely
+        denom = (F_hi - F_lo)
+        w = np.where(denom > 0, (p - F_lo) / denom, 0.0)
 
-            # linear interpolation between t_lo and t_hi
-            qv = (t_lo + w * (t_hi - t_lo)).astype(dtype)
+        # linear interpolation between t_lo and t_hi
+        Q[:, j] = t_lo + w * (t_hi - t_lo)
 
-            # bounds neat: if hi==lo (at edge) then qv = t_lo remains
-            out_block.iloc[:, j] = qv
+    df_quant = pd.DataFrame(Q.astype(dtype, copy=False), index=df.index, columns=out_cols)
 
-        return out_block
-
-    if chunk_size is None:
-        out = _process_block(df, out)
-    else:
-        # chunk processing to limit peak memory usage
-        idx = df.index
-        for start in range(0, len(df), chunk_size):
-            sl = slice(start, min(start + chunk_size, len(df)))
-            out.iloc[sl, :] = _process_block(df.iloc[sl], out.iloc[sl].copy()).to_numpy()
-
-    return out
+    return df_quant

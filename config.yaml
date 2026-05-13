@@ -1,4 +1,4 @@
-name: test
+name: xval_25l_200t
 
 #paths
 dir_base: "c:/WERK/DATA/FRESHEM/Interpolation"
@@ -9,17 +9,18 @@ data_input: "LCI_Sharp_MOD_inv.xyz"
 
 # input data variables
 doi_name: "DOI_STANDARD"
-epsg: 32631
+epsg: 28992
 
 # general variables
 variable_name: "RHO"
 indicators: [1,2,3,5,10,20,30,50,100]
-indicator_bounds: [0.0, 150.0]
+indicator_bounds: [0.01, 150.0]
 quantiles: [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95]
 cellsize_xy: 100
 cellsize_z: 1.0
 buffer_xy: 300
 buffer_z: 3
+xval_n_lines: 25
 
 # ml variables
 OGC_angles: [7.5,22.5,37.5,52.5,67.5,82.5,97.5,112.5,127.5,142.5,157.5,172.5]
@@ -27,4 +28,7 @@ rf_n_trees: 200
 features: ['Z', 'OGC_7.5', 'OGC_22.5', 'OGC_37.5', 'OGC_52.5', 'OGC_67.5', 'OGC_82.5', 'OGC_97.5', 'OGC_112.5', 'OGC_127.5', 'OGC_142.5', 'OGC_157.5', 'OGC_172.5']
 
 # plotting
-plotting_depths: [-150, -50, -10, -5, 0.0]
+# plotting_depths: [-150, -50, -10, -5, 0.0]
+plotting_depths: [-25,-5]
+histogram_bins: 50
+histogram_sample_size: 25000

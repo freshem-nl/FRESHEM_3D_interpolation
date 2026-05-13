@@ -17,6 +17,7 @@ def load_config(path="config.yaml"):
     cfg["dir_input"] = cfg["dir_base"] / cfg["dir_input"]
     cfg["dir_output"] = cfg["dir_base"] / "output" / f'{t0.strftime("%Y%m%d")} - {cfg["name"]}'
     cfg["dir_plot"] = cfg["dir_output"] / "plots"
+    cfg["dir_rasters"] = cfg["dir_output"] / "rasters"
 
     cfg["path_input"] = cfg["dir_input"] / cfg["data_input"]
 
@@ -25,5 +26,7 @@ def load_config(path="config.yaml"):
     cfg["path_preproc_data_gridded"] = cfg["dir_output"] / "preproc - data gridded.nc"
     cfg["path_preproc_data_flightlines"] = cfg["dir_output"] / "preproc - data - flightlines.parquet"
     cfg["path_prediction"] = cfg["dir_output"] / "prediction.nc"
-
+    cfg["path_prediction_xval"] = cfg["dir_output"] / "prediction xval.nc"
+    cfg["path_postproc"] = cfg["dir_output"] / "postproc.nc"
+    
     return cfg

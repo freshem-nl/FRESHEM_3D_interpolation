@@ -1,6 +1,17 @@
+import geopandas as gpd
 import numpy as np
 import xarray as xr
-import pandas as pd
+import rioxarray as rio
+
+
+def df_to_gdf(df, epsg=None, crs=None):
+
+    if epsg is not None:
+        crs = f"EPSG:{epsg}"
+    # Convert to geodataframe
+    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df["X"], df["Y"]), crs=crs)
+    return gdf
+
 
 # def add_to_dataset(data, ds):
 
@@ -22,30 +33,14 @@ import pandas as pd
 
 #     return ds
 
-import numpy as np
-import xarray as xr
-import rioxarray
-
 
 def init_ds(df, cellsize_xy=None, cellsize_z=None, epsg=None, buffer_xy=0, buffer_z=0):
 
-    x = np.arange(
-        df["X"].min() - buffer_xy,
-        df["X"].max() + buffer_xy + cellsize_xy,
-        cellsize_xy
-    )
+    x = np.arange(df["X"].min() - buffer_xy, df["X"].max() + buffer_xy + cellsize_xy, cellsize_xy)
 
-    y = np.arange(
-        df["Y"].min() - buffer_xy,
-        df["Y"].max() + buffer_xy + cellsize_xy,
-        cellsize_xy
-    )
+    y = np.arange(df["Y"].min() - buffer_xy, df["Y"].max() + buffer_xy + cellsize_xy, cellsize_xy)
 
-    z = np.arange(
-        df["Z"].min() - buffer_z,
-        df["Z"].max() + buffer_z + cellsize_z,
-        cellsize_z
-    )
+    z = np.arange(df["Z"].min() - buffer_z, df["Z"].max() + buffer_z + cellsize_z, cellsize_z)
 
     ds = xr.Dataset(coords={"x": x, "y": y, "z": z})
 
@@ -54,8 +49,6 @@ def init_ds(df, cellsize_xy=None, cellsize_z=None, epsg=None, buffer_xy=0, buffe
 
     return ds
 
-
-import numpy as np
 
 def add_df_to_ds(ds, df, coord_map=None, value_cols=None, dtype="float32"):
     """
@@ -98,7 +91,7 @@ def add_df_to_ds(ds, df, coord_map=None, value_cols=None, dtype="float32"):
     iy = np.searchsorted(y, df[coord_map["y"]].to_numpy())
     iz = np.searchsorted(z, df[coord_map["z"]].to_numpy())
 
-    #value
+    # value
     dfv = df.loc[:, value_cols]
 
     # Create variables on-the-fly (if missing), then fill
@@ -109,6 +102,3 @@ def add_df_to_ds(ds, df, coord_map=None, value_cols=None, dtype="float32"):
         ds[c].values[iz, iy, ix] = dfv[c].to_numpy()
 
     return ds
-
-
-
