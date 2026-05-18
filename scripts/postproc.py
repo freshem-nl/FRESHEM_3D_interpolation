@@ -6,9 +6,9 @@ import xarray as xr
 from scripts import _postproc_helper, _read_and_write
 
 
-def quantiles(cfg):
+def ds_ind_probs_to_quantiles(cfg):
     t0 = datetime.now()
-    print('\nPOSTPROCESSING PREDICTIONS')
+    print("\nPOSTPROCESSING PREDICTIONS")
     print("calculate quantiles from indicator probabilities...", end=" ")
 
     # from config
@@ -29,14 +29,12 @@ def quantiles(cfg):
 
     df_ind_probs = ds_ind_probs[indicator_col_names].stack(cell=("z", "y", "x")).where(mask1d, drop=True).to_dataframe()
 
-    df_quant = _postproc_helper.indicator_probs_to_quantiles(
+    df_quant = _postproc_helper.ind_probs_to_quantiles(
         df_ind_probs,
         indicators=indicators,
-        indicator_col_names=indicator_col_names,
         q_levels=quantiles,
         lower=bounds[0],
         upper=bounds[1],
-        ensure_monotonic=True,
         dtype=np.float32,
     )
 

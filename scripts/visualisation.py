@@ -6,6 +6,7 @@ import matplotlib.ticker as mticker
 import numpy as np
 import seaborn as sns
 from matplotlib.colors import LogNorm
+from sklearn.metrics import ConfusionMatrixDisplay
 
 
 def plot_df(df, name, cfg):
@@ -122,3 +123,13 @@ def histogram(series, path, cfg):
 
     plt.savefig(path, dpi=300, bbox_inches="tight")
     plt.close()
+
+def plot_confusion_matrix(cm, labels, title, fmt, path):
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+    fig, ax = plt.subplots(figsize=(7, 6))
+    disp.plot(ax=ax, cmap="Blues", colorbar=True, values_format=fmt)
+    ax.set_title(f"Confusion matrix ({title})")
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    plt.savefig(path, dpi=300)
+    plt.close(fig)

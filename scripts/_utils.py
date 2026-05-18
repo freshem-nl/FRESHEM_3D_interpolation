@@ -13,27 +13,6 @@ def df_to_gdf(df, epsg=None, crs=None):
     return gdf
 
 
-# def add_to_dataset(data, ds):
-
-#     if isinstance(data, pd.DataFrame):
-#         if 'ix' in data.index.names and 'iy' in data.index.names and 'iz' in data.index.names:
-#             ix = data.index.get_level_values("ix").to_numpy(np.int32)
-#             iy = data.index.get_level_values("iy").to_numpy(np.int32)
-#             iz = data.index.get_level_values("iz").to_numpy(np.int32)
-
-#         for col in data.columns:
-#             dtype=data[col].dtype
-#             if np.issubdtype(dtype, np.floating):
-#                 nodata_value = np.float32(np.nan)
-#             elif np.issubdtype(dtype, np.integer):
-#                 nodata_value = np.int32(-9999)
-#             arr = np.full((ds.sizes["z"], ds.sizes["y"], ds.sizes["x"]), nodata_value, dtype=dtype)
-#             arr[iz, iy, ix] = data[col].to_numpy(dtype=dtype)
-#             ds[f"{col}"] = (("z", "y", "x"), arr)
-
-#     return ds
-
-
 def init_ds(df, cellsize_xy=None, cellsize_z=None, epsg=None, buffer_xy=0, buffer_z=0):
 
     x = np.arange(df["X"].min() - buffer_xy, df["X"].max() + buffer_xy + cellsize_xy, cellsize_xy)

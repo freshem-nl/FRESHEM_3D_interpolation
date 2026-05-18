@@ -1,16 +1,14 @@
 import numpy as np
 import pandas as pd
 
-def indicator_probs_to_quantiles(
+
+def ind_probs_to_quantiles(
     df: pd.DataFrame,
     indicators,
-    indicator_col_names,
     q_levels=(0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95),
     lower=0.0,
     upper=150.0,
-    ensure_monotonic=True,
     dtype=np.float32,
-    chunk_size=None,  # bv. 1_000_000 als je memory wil sparen
     prefix="Q",
 ):
 
@@ -19,13 +17,13 @@ def indicator_probs_to_quantiles(
 
     # Extend thresholds with hard bounds: t_ext = [lower, t1..tm, upper]
     t_ext = np.concatenate([[lower], indicators, [upper]]).astype(np.float32)
-    m_ext = t_ext.size 
+    m_ext = t_ext.size
 
     # output column names: e.g. Q05, Q10, Q25, Q50, Q75, Q90, Q95
     out_cols = [f"{prefix}{int(round(q*100)):02d}" for q in q_levels]
-    
+
     # Read CDF values: shape (n, m)
-    F = df.loc[:, indicator_col_names].to_numpy(dtype=np.float64, copy=False)
+    F = df.to_numpy(dtype=np.float64, copy=False)
 
     # monotonicity enforcement (can be needed if CDF values are noisy and not perfectly increasing)
     F = np.maximum.accumulate(F, axis=1)
@@ -47,18 +45,18 @@ def indicator_probs_to_quantiles(
     for j, p in enumerate(q_levels):
 
         # Find the first index hi where F_ext >= p (done via counting values < p)
-        hi = np.sum(F_ext < p, axis=1).astype(np.int32) # gives index of upper bracket
-        hi = np.clip(hi, 0, m_ext - 1) # safety clip
-        lo = np.clip(hi - 1, 0, m_ext - 1) # lower bracket is one index below hi, with safety clip at 0
+        hi = np.sum(F_ext < p, axis=1).astype(np.int32)  # gives index of upper bracket
+        hi = np.clip(hi, 0, m_ext - 1)  # safety clip
+        lo = np.clip(hi - 1, 0, m_ext - 1)  # lower bracket is one index below hi, with safety clip at 0
 
         # Gather brackets
-        t_lo = t_ext[lo] # (n,) lower threshold
-        t_hi = t_ext[hi] #  (n,) upper threshold
-        F_lo = F_ext[np.arange(n), lo] # (n,) CDF value at lower threshold
-        F_hi = F_ext[np.arange(n), hi] #  (n,) CDF value at upper threshold
+        t_lo = t_ext[lo]  # (n,) lower threshold
+        t_hi = t_ext[hi]  #  (n,) upper threshold
+        F_lo = F_ext[np.arange(n), lo]  # (n,) CDF value at lower threshold
+        F_hi = F_ext[np.arange(n), hi]  #  (n,) CDF value at upper threshold
 
         # Linear interpolation weight; handle flat segments safely
-        denom = (F_hi - F_lo)
+        denom = F_hi - F_lo
         w = np.where(denom > 0, (p - F_lo) / denom, 0.0)
 
         # linear interpolation between t_lo and t_hi
@@ -67,3 +65,24 @@ def indicator_probs_to_quantiles(
     df_quant = pd.DataFrame(Q.astype(dtype, copy=False), index=df.index, columns=out_cols)
 
     return df_quant
+
+
+def class_from_quantile(q, indicators, bounds):
+
+    q_arr = np.asarray(q, float)
+    ind = np.asarray(indicators, float)
+    lo, hi = map(float, bounds)
+    
+    # Class index for intervals: [lo,t1], (t1,t2], ..., (t_last, hi]
+    # side="left" ensures exact boundaries go to the lower (right-closed) class.
+    codes = np.searchsorted(ind, q_arr, side="left")
+    
+    # Labels (ordered)
+    labels = [f"[{lo:g}, {ind[0]:g}]"]
+    for i in range(1, len(ind)):
+        labels.append(f"({ind[i-1]:g}, {ind[i]:g}]")
+    labels.append(f"({ind[-1]:g}, {hi:g}]")
+
+    cat = pd.Categorical.from_codes(codes, categories=labels, ordered=True)   
+
+    return pd.Series(cat, index=q.index, name=q.name)

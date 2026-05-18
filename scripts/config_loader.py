@@ -18,6 +18,7 @@ def load_config(path="config.yaml"):
     cfg["dir_output"] = cfg["dir_base"] / "output" / f'{t0.strftime("%Y%m%d")} - {cfg["name"]}'
     cfg["dir_plot"] = cfg["dir_output"] / "plots"
     cfg["dir_rasters"] = cfg["dir_output"] / "rasters"
+    cfg["dir_validation"] = cfg["dir_output"] / "validation"
 
     cfg["path_input"] = cfg["dir_input"] / cfg["data_input"]
 

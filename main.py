@@ -40,16 +40,16 @@ def main(cfg):
         visualisation.plot_ds(ds_pred, "pred", cfg)
 
     def postprocessing():
-        ds = postproc.quantiles(cfg)
-        visualisation.plot_ds(ds, "postproc - grid", cfg)
+        ds = postproc.ds_ind_probs_to_quantiles(cfg)
+        visualisation.plot_ds(ds, "postproc", cfg)
         _read_and_write.ds_to_tiff(ds, cfg["dir_rasters"], "postproc")
 
-    def machine_learning_xval():
+    def xval_machine_learning():
+        df, ds_feat = preproc_ml.OGC(cfg)
         lines_name, lines_xy = xval.xval_lines(cfg)
+        model_mask = ds_feat["mask"].copy()  # overall mask for reuse
         ds_pred = None
         txt = "crossvalidation: train without data of line, predict on line"
-        df, ds_feat = preproc_ml.OGC(cfg)
-        model_mask = ds_feat["mask"].copy()  # overall mask for reuse
         for line in tqdm(lines_name, desc=txt, unit="line", leave=True):
             # exclude line from training data, exclude outside mask from prediction grid
             df_train = df[df["LINE_NO"] != line].copy()  # exclude line
@@ -59,18 +59,19 @@ def main(cfg):
             ds_pred = ml.rf_predict(model, output_names, ds_feat, cfg, ds_pred=ds_pred, xval=True, verbose=False)
         visualisation.plot_ds(ds_pred, "pred - xval", cfg)
 
-    def xval_validation():
-        # voor later: eenvoudig quantiiles berekenen ook van gridded data. Data en prediction quantiles omzetten naar klassen, en vergelijken via confusion matrix, of bekijk verschil in klassen tussen p25 en p75
-        pass
+    def xval_scoring():
+        xval.validation(cfg)
 
-    preprocessing_data()
-    preprocessing_grid()
-    machine_learning()
-    postprocessing()
-    machine_learning_xval()
+    # preprocessing_data()
+    # preprocessing_grid()
+    # machine_learning()
+    # postprocessing()
+    # xval_machine_learning()
+    xval_scoring()
 
     # total runtime
     print(f"\nTotal runtime: {(datetime.now() - t)}.")
+
 
 if __name__ == "__main__":
 
