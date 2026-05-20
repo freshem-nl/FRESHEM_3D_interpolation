@@ -16,9 +16,12 @@ from scripts import (
     xval,
 )
 
-
 def main(cfg):
     t = datetime.now()
+
+    # copy config file
+    path = cfg["dir_output"] / "config.yaml"
+    _read_and_write.write_yaml(cfg, path)
 
     def preprocessing_data():
         df = _read_and_write.read_skytem_xyz(cfg)
@@ -46,27 +49,27 @@ def main(cfg):
 
     def xval_machine_learning():
         df, ds_feat = preproc_ml.OGC(cfg)
-        lines_name, lines_xy = xval.xval_lines(cfg)
+        lines = xval.xval_lines(cfg)
         model_mask = ds_feat["mask"].copy()  # overall mask for reuse
         ds_pred = None
         txt = "crossvalidation: train without data of line, predict on line"
-        for line in tqdm(lines_name, desc=txt, unit="line", leave=True):
+        for line in tqdm(lines["LINE_NO"].unique(), desc=txt, unit="line", leave=True):
             # exclude line from training data, exclude outside mask from prediction grid
             df_train = df[df["LINE_NO"] != line].copy()  # exclude line
-            ds_feat["mask"] = xval.mask_line(lines_xy, model_mask, line)  # include line only
+            ds_feat["mask"] = xval.mask_line(lines, model_mask, line)  # include line only
             # train and predict
             model, output_names = ml.rf_train(df_train, cfg, verbose=False)  # train
             ds_pred = ml.rf_predict(model, output_names, ds_feat, cfg, ds_pred=ds_pred, xval=True, verbose=False)
-        visualisation.plot_ds(ds_pred, "pred - xval", cfg)
+        visualisation.plot_ds(ds_pred, "xval", cfg)
 
     def xval_scoring():
         xval.validation(cfg)
 
-    # preprocessing_data()
-    # preprocessing_grid()
-    # machine_learning()
-    # postprocessing()
-    # xval_machine_learning()
+    preprocessing_data()
+    preprocessing_grid()
+    machine_learning()
+    postprocessing()
+    xval_machine_learning()
     xval_scoring()
 
     # total runtime

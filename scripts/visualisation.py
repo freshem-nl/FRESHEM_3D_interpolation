@@ -69,11 +69,29 @@ def plot_ds(ds, name, cfg):
             plt.title(f"{var} at z={depth}m")
 
             # save figure
-            path = dir_plot / f"{name} - {var} at z={depth}m.png"
+            path = dir_plot / 'depth_slices' / f"{name} - {var} at z={depth}m.png"
+            os.makedirs(path.parent, exist_ok=True)
             plt.savefig(path, dpi=300, bbox_inches="tight")
             plt.close()
 
     print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+
+def boxplot(df, x=None, y=None, path=None, hue=None, showfliers=True):
+
+    df = df.copy().reset_index(drop=True)
+    plt.figure(figsize=(10, 6))
+    sns.boxplot(data=df, x=x, y=y, hue=hue, showfliers=showfliers)
+    
+    title = f"{y} by {x}" if x is not None else y
+    plt.title(title)
+    plt.xlabel(x)
+    plt.ylabel(y)
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+
+    os.makedirs(path.parent, exist_ok=True)
+    plt.savefig(path, dpi=300)
+    plt.close()
 
 def histogram(series, path, cfg):
 

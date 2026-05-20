@@ -1,42 +1,55 @@
-from datetime import datetime
 import os
+from datetime import datetime
 from pathlib import Path
+
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-from joblib import dump, load
+import yaml
+
 
 def write_dataset(ds, path):
 
+    encoding = {v: {"zlib": True, "complevel": 4} for v in ds.data_vars}
+
     path = path.with_suffix(".nc")
     path.parent.mkdir(parents=True, exist_ok=True)
-    ds.to_netcdf(path)
+
+    ds.to_netcdf(path, engine="netcdf4", encoding=encoding)
+
 
 def read_dataset(path):
     path = path.with_suffix(".nc")
-    return xr.open_dataset(path)
+    ds = xr.open_dataset(path)
+    return ds
+
 
 def write_table(data, path):
+
+    if isinstance(data, pd.Series):
+        data = data.to_frame(name=data.name)
+
     path.parent.mkdir(parents=True, exist_ok=True)
 
     if path.suffix == ".parquet":
         data.to_parquet(path)
         # df.to_parquet(path, engine="fastparquet")
 
+
 def read_table(path):
 
-    if path.suffix == ".parquet":    
+    if path.suffix == ".parquet":
         try:
             # First try reading with geopandas, which can handle geospatial metadata if present
             data = gpd.read_parquet(path)
         except Exception:
             data = pd.read_parquet(path)
 
-    return data   
+    return data
+
 
 def ds_to_tiff(ds, dir_output, name):
-    
 
     os.makedirs(dir_output, exist_ok=True)
 
@@ -55,7 +68,7 @@ def ds_to_tiff(ds, dir_output, name):
         z_vals = ds.z.values
 
         da.attrs["long_name"] = [f"z={z:.1f} m" for z in z_vals]
-        
+
         path = dir_output / f"{name} - {var}.tif"
         da.rio.to_raster(path)
 
@@ -63,11 +76,11 @@ def ds_to_tiff(ds, dir_output, name):
 def read_skytem_xyz(cfg):
     """Parse the SkyTEM inversion export, handling AGS (/ LINE_NO) and #HEADERS styles."""
     t0 = datetime.now()
-    print('\nPREPROCESSING DATA')
+    print("\nPREPROCESSING DATA")
 
     path_input = cfg["path_input"]
-    dir_output = cfg["dir_output"]
-    path_output = (dir_output / path_input.stem).with_suffix(".parquet")
+    dir_data = cfg["dir_data"]
+    path_output = (dir_data / path_input.stem).with_suffix(".parquet")
 
     if path_output.exists():
         print(f"Reading {path_output}...", end=" ")
@@ -93,11 +106,7 @@ def read_skytem_xyz(cfg):
                 header_line = line[1:].strip()
                 for tail in lines[idx + 1 :]:
                     stripped = tail.strip()
-                    if (
-                        stripped
-                        and not stripped.startswith("/")
-                        and not stripped.startswith("#")
-                    ):
+                    if stripped and not stripped.startswith("/") and not stripped.startswith("#"):
                         data_lines.append(stripped)
                 break
 
@@ -115,24 +124,16 @@ def read_skytem_xyz(cfg):
         if header_line is None:
             for idx, raw_line in enumerate(lines):
                 stripped = raw_line.strip().lstrip("/").lstrip("#").strip()
-                if "LINE_NO" in stripped and (
-                    "RHO_" in stripped or "SIGMA_" in stripped
-                ):
+                if "LINE_NO" in stripped and ("RHO_" in stripped or "SIGMA_" in stripped):
                     header_line = stripped
                     for tail in lines[idx + 1 :]:
                         entry = tail.strip()
-                        if (
-                            entry
-                            and not entry.startswith("/")
-                            and not entry.startswith("#")
-                        ):
+                        if entry and not entry.startswith("/") and not entry.startswith("#"):
                             data_lines.append(entry)
                     break
 
         if header_line is None:
-            raise ValueError(
-                "Unable to find column headers containing LINE_NO and RHO_/SIGMA_ information."
-            )
+            raise ValueError("Unable to find column headers containing LINE_NO and RHO_/SIGMA_ information.")
 
         columns = [col.strip() for col in header_line.split() if col.strip()]
         rows: list[list[str]] = []
@@ -161,7 +162,37 @@ def read_skytem_xyz(cfg):
         path_output.parent.mkdir(parents=True, exist_ok=True)
         write_table(df, path_output)
 
-        txt = f"done ({(datetime.now() - t0).total_seconds():.2f}s). Read {len(df)} rows with {len(df.columns)} columns."
+        txt = (
+            f"done ({(datetime.now() - t0).total_seconds():.2f}s). Read {len(df)} rows with {len(df.columns)} columns."
+        )
         print(txt)
 
     return df
+
+
+def write_yaml(data, path):
+
+    def convert(obj):
+        if isinstance(obj, dict):
+            return {k: convert(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert(i) for i in obj]
+        elif isinstance(obj, Path):
+            return str(obj)
+        elif isinstance(obj, (np.integer, np.int64, np.int32)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, np.float64, np.float32)):
+            return float(obj)
+        elif isinstance(obj, (np.bool_)):
+            return bool(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return obj
+
+    serializable_data = convert(data)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(path, "w") as f:
+        yaml.safe_dump(serializable_data, f)

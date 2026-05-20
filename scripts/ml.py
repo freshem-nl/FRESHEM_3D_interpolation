@@ -35,8 +35,8 @@ def rf_train(df, cfg, verbose=True):
     model.fit(X, y)
 
     # save model
-    path = dir_output / "rf_model.joblib"
-    dump(model, path)
+    # path = dir_output / "rf_model.joblib"
+    # dump(model, path)
 
     if verbose:
         print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")

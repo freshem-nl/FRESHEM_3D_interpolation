@@ -1,37 +1,47 @@
-import numpy as np
-import xarray as xr
-from sklearn.metrics import confusion_matrix, classification_report
-import pandas as pd
 from datetime import datetime
 
-from scripts import _read_and_write, _scoring, _postproc_helper, visualisation
+import numpy as np
+import pandas as pd
+import xarray as xr
+from sklearn.metrics import classification_report, confusion_matrix
+
+from scripts import _postproc_helper, _read_and_write, _scoring, visualisation
+
 
 def xval_lines(cfg):
 
-    #TODO DEZE NOG VERSIMPELEN: NEEM 50% LANGSTE LIJNEN EN TREK DAARUIT
+    t0 = datetime.now()
 
     # from config
     path_flightlines = cfg["path_preproc_data_flightlines"]
     n_lines = cfg["xval_n_lines"]
 
+    print(f"\nselect {n_lines} lines", end="... ")
+
     # read flightlines
     xy_lines = _read_and_write.read_table(path_flightlines)
 
     # Count number of points per line
-    counts = xy_lines.groupby("LINE_NO").size().sort_values(ascending=False)    
+    counts = xy_lines.groupby("LINE_NO").size().sort_values(ascending=False)
 
-    # Candidate pool: top-K longest lines (but never smaller than n_lines if possible)
-    k = min(int(75), len(counts))
-    k = max(k, min(n_lines, len(counts)))
-    pool_lines = counts.index[:k].to_numpy()
+    # select top_lines from the longest lines, at least 50% of the lines
+    n_lines_total = xy_lines["LINE_NO"].nunique()
+    fraction_to_select = n_lines/n_lines_total
+    fraction_to_select_from = max(0.5, fraction_to_select)  # at least top 50% lines
+    n_top = int(np.ceil(len(counts) * fraction_to_select_from))
+    top_lines = counts.index[:n_top].tolist()
 
-    # Sample exactly n_lines (or fewer if not enough lines exist)
-    n_select = min(n_lines, len(pool_lines))
-    rng = np.random.default_rng(42)
-    selected_lines = rng.choice(pool_lines, size=n_select, replace=False).tolist()
+    # random sample n_lines from top_lines without replacement, with fixed seed for reproducibility
+    rng = np.random.default_rng(cfg.get("seed", 42))  # or cfg["seed"]
+    n_pick = min(n_lines, len(top_lines))  # safety if n_lines > available
+    selected_lines = rng.choice(top_lines, size=n_pick, replace=False).tolist()
 
-    xy_selected = xy_lines[xy_lines["LINE_NO"].isin(selected_lines)].copy()
-    return selected_lines, xy_selected
+    # filter xy_lines to selected lines
+    xy_lines_selected = xy_lines[xy_lines["LINE_NO"].isin(selected_lines)].copy()
+
+    print(f'done ({(datetime.now() - t0).total_seconds():.2f}s).')
+
+    return xy_lines_selected
 
 
 def mask_line(df, mask_overall, line_no):
@@ -63,6 +73,7 @@ def mask_line(df, mask_overall, line_no):
 
     return new_mask
 
+
 def validation(cfg):
 
     t0 = datetime.now()
@@ -73,8 +84,8 @@ def validation(cfg):
     path_pred = cfg["path_prediction_xval"]
     inds = np.array(cfg["indicators"])
     ind_bounds = cfg["indicator_bounds"]
-    dir_output = cfg["dir_output"]
-    dir_plot = cfg["dir_plot"]
+    dir_data = cfg["dir_data"]
+    dir_xval = cfg["dir_xval"]
 
     ind_cols = [f"P({b:g})" for b in inds]
 
@@ -83,51 +94,67 @@ def validation(cfg):
     ds_pred = _read_and_write.read_dataset(path_pred)
 
     # convert to dataframes and drop non-data variables and NaNs
-    df_obs = ds_obs.to_dataframe().drop(columns=['spatial_ref', 'mask']).dropna()
-    df_pred = ds_pred.to_dataframe().drop(columns=['spatial_ref']).dropna()
+    df_obs = ds_obs.to_dataframe().drop(columns=["spatial_ref", "mask"]).dropna()
+    df_pred = ds_pred.to_dataframe().drop(columns=["spatial_ref"]).dropna()
 
-    #keep only df_obs with index in df_pred
+    # keep only df_obs with index in df_pred
     df_obs = df_obs[df_obs.index.isin(df_pred.index)]
 
     # calculate median quantiles and convert to class labels
-    df_obs["median"] = _postproc_helper.ind_probs_to_quantiles(df_obs[ind_cols], inds, (0.5,), ind_bounds[0], ind_bounds[1])
+    df_obs["median"] = _postproc_helper.ind_probs_to_quantiles(
+        df_obs[ind_cols], inds, (0.5,), ind_bounds[0], ind_bounds[1]
+    )
     df_obs["median class"] = _postproc_helper.class_from_quantile(df_obs["median"], inds, ind_bounds)
 
-    df_pred["median"] = _postproc_helper.ind_probs_to_quantiles(df_pred[ind_cols], inds, (0.5,), ind_bounds[0], ind_bounds[1])
+    df_pred["median"] = _postproc_helper.ind_probs_to_quantiles(
+        df_pred[ind_cols], inds, (0.5,), ind_bounds[0], ind_bounds[1]
+    )
     df_pred["median class"] = _postproc_helper.class_from_quantile(df_pred["median"], inds, ind_bounds)
 
     # calculate RPS (ranked probability score) for each cell, and put in dataframe
     print("...ranked probability score (RPS)")
-    df_obs["rps"] = _scoring.rps_from_cdf(df_pred[ind_cols], df_obs[ind_cols], normalize=True)
+    rps = _scoring.rps_from_cdf(df_pred[ind_cols], df_obs[ind_cols], normalize=True)
 
-    # summarize RPS per class, and save to csv
-    path = dir_output / "ranked probability score per class.csv"
-    _scoring.rps_summary(df_obs, rps_col="rps", class_col="median class", path=path)
+    # summarize RPS overall and per class, and save to csv
+    path = dir_xval / "xval - ranked probability score.csv"
+    _scoring.rps_summary(rps, df_obs["median class"], path=path)
 
-     # confusion matrix for median class
+    # boxplot of overall RPS
+    path = dir_xval / "xval - RPS.png"
+    visualisation.boxplot(df_obs.assign(RPS=rps), y="RPS", path=path, showfliers=False)
+
+    # boxplot of RPS by true class
+    path = dir_xval / "xval - RPS by true class.png"
+    visualisation.boxplot(df_obs.assign(RPS=rps), x="median class", y="RPS", path=path, showfliers=False)
+
+    # confusion matrix for median class
     print("...confusion matrix")
     y_true = df_obs["median class"]
     y_pred = df_pred["median class"]
     labels = df_obs["median class"].cat.categories
 
     cms = [
-        (confusion_matrix(y_true, y_pred, labels=labels),               "counts",               "d"),
+        (confusion_matrix(y_true, y_pred, labels=labels), "counts", "d"),
         (confusion_matrix(y_true, y_pred, labels=labels, normalize="true"), "row-normalized", ".2f"),
         (confusion_matrix(y_true, y_pred, labels=labels, normalize="pred"), "col-normalized", ".2f"),
-        (confusion_matrix(y_true, y_pred, labels=labels, normalize="all"),  "normalized",      ".2f"),
+        (confusion_matrix(y_true, y_pred, labels=labels, normalize="all"), "normalized", ".2f"),
     ]
 
     for cm, title, fmt in cms:
-        path = dir_plot / f"pred - xval - confusion matrix - {title.replace(' ', '_')}.png"
+        path = dir_xval / f"xval - confusion matrix - {title.replace(' ', '_')}.png"
         visualisation.plot_confusion_matrix(cm, labels, title, fmt, path)
-    
+
     cr = classification_report(y_true, y_pred, labels=labels, target_names=[str(c) for c in labels], zero_division=0)
 
-   # classification report for median class
+    # classification report for median class
     print("...classification report")
     cr = classification_report(y_true, y_pred, labels=labels, target_names=[str(c) for c in labels], zero_division=0)
-    path = dir_output / "classification report.txt"
+    path = dir_xval / "xval - classification report.txt"
     with open(path, "w", encoding="utf-8") as f:
         f.write(cr)
+
+    # save results
+    path = dir_data / "xval - rps.parquet"
+    _read_and_write.write_table(rps, path)
 
     print(f"...done ({(datetime.now() - t0).total_seconds():.2f}s).")
