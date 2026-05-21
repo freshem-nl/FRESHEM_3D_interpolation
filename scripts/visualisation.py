@@ -5,7 +5,9 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 import seaborn as sns
-from matplotlib.colors import LogNorm
+from matplotlib.collections import PatchCollection
+from matplotlib.colors import BoundaryNorm, ListedColormap, LogNorm
+from matplotlib.patches import Ellipse
 from sklearn.metrics import ConfusionMatrixDisplay
 
 
@@ -69,19 +71,20 @@ def plot_ds(ds, name, cfg):
             plt.title(f"{var} at z={depth}m")
 
             # save figure
-            path = dir_plot / 'depth_slices' / f"{name} - {var} at z={depth}m.png"
+            path = dir_plot / "depth_slices" / f"{name} - {var} at z={depth}m.png"
             os.makedirs(path.parent, exist_ok=True)
             plt.savefig(path, dpi=300, bbox_inches="tight")
             plt.close()
 
     print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
 
+
 def boxplot(df, x=None, y=None, path=None, hue=None, showfliers=True):
 
     df = df.copy().reset_index(drop=True)
     plt.figure(figsize=(10, 6))
     sns.boxplot(data=df, x=x, y=y, hue=hue, showfliers=showfliers)
-    
+
     title = f"{y} by {x}" if x is not None else y
     plt.title(title)
     plt.xlabel(x)
@@ -92,6 +95,7 @@ def boxplot(df, x=None, y=None, path=None, hue=None, showfliers=True):
     os.makedirs(path.parent, exist_ok=True)
     plt.savefig(path, dpi=300)
     plt.close()
+
 
 def histogram(series, path, cfg):
 
@@ -132,7 +136,7 @@ def histogram(series, path, cfg):
     else:
         sns.histplot(df_plot, bins=n_bins_eff, **hist_kws)
 
-    # probabilities x-axis from 0 to 1 
+    # probabilities x-axis from 0 to 1
     if name.startswith("P("):
         plt.xlim(0, 1)
 
@@ -141,6 +145,7 @@ def histogram(series, path, cfg):
 
     plt.savefig(path, dpi=300, bbox_inches="tight")
     plt.close()
+
 
 def plot_confusion_matrix(cm, labels, title, fmt, path):
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
@@ -151,3 +156,95 @@ def plot_confusion_matrix(cm, labels, title, fmt, path):
     plt.tight_layout()
     plt.savefig(path, dpi=300)
     plt.close(fig)
+
+
+def anisotropy(
+    sl,
+    bg,
+    *,
+    max_angle,
+    max_dist,
+    min_dist,
+    stride=10,
+    scale=0.25,
+    alpha=0.35,
+    lw=0.6,
+    edgecolor="k",
+    variable_unit="m",
+    variable_value=None,
+    facecolor="none",
+    use_half_long=True,
+    use_half_short=False,
+    figsize=(14, 10),
+    dpi=150,
+    path=None,
+):
+    """
+    Plot categorical background (-1/0/1) with anisotropy ellipses on top.
+
+    Angle convention input:
+      - 0° = North, positive clockwise (GIS)
+    Matplotlib Ellipse angle:
+      - degrees CCW from +x (East)
+      => angle_mpl = 90 - angle_input
+    """
+
+    # Coords
+    y = sl["y"].values
+    x = sl["x"].values
+
+    # Ensure bg is a plain ndarray
+    bg = np.asarray(bg)
+
+    # --- Background colormap for classes -1/0/1 ---
+    cmap = ListedColormap(["lightgray", "orange", "dodgerblue"])  # -1, 0, 1
+    norm = BoundaryNorm([-1.5, -0.5, 0.5, 1.5], cmap.N)
+
+    # --- Figure ---
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+
+    im = ax.pcolormesh(x, y, bg, cmap=cmap, norm=norm, shading="nearest")
+
+    cbar = fig.colorbar(im, ax=ax, ticks=[-1, 0, 1])
+    cbar.ax.set_yticklabels(["no data", f"<={variable_value} {variable_unit}", f">{variable_value} {variable_unit}"])
+
+    # --- Ellipse semi-axes in meters ---
+    a = (0.5 * max_dist) if use_half_long else max_dist
+    b = (0.5 * min_dist) if use_half_short else min_dist
+
+    # Shrink ellipses for visualization
+    a = a * scale
+    b = b * scale
+
+    # Only draw where everything is valid
+    ok = np.isfinite(max_angle) & np.isfinite(a) & np.isfinite(b) & (a > 0) & (b > 0)
+
+    # Sample grid to reduce clutter
+    iy = np.arange(0, ok.shape[0], stride)
+    ix = np.arange(0, ok.shape[1], stride)
+    IY, IX = np.meshgrid(iy, ix, indexing="ij")
+    sample = ok[IY, IX]
+
+    ys = y[IY[sample]]
+    xs = x[IX[sample]]
+    ang = max_angle[IY[sample], IX[sample]]
+    a_s = a[IY[sample], IX[sample]]
+    b_s = b[IY[sample], IX[sample]]
+
+    # Convert to Matplotlib angle convention
+    ang_mpl = 90.0 - ang
+
+    patches = [
+        Ellipse((x0, y0), width=2 * a0, height=2 * b0, angle=float(am))
+        for x0, y0, a0, b0, am in zip(xs, ys, a_s, b_s, ang_mpl)
+    ]
+
+    ax.add_collection(PatchCollection(patches, facecolor=facecolor, edgecolor=edgecolor, linewidth=lw, alpha=alpha))
+
+    ax.set_title("Background classes with anisotropy ellipses")
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("y (m)")
+    ax.set_aspect("equal")
+    # plt.show()
+    plt.savefig(path)
+    plt.close()

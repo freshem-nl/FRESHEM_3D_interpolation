@@ -23,7 +23,22 @@ def init_ds(df, cellsize_xy=None, cellsize_z=None, epsg=None, buffer_xy=0, buffe
 
     ds = xr.Dataset(coords={"x": x, "y": y, "z": z})
 
+
+    ds.attrs.update({
+        "cellsize_x": cellsize_xy,
+        "cellsize_y": cellsize_xy,
+        "cellsize_z": cellsize_z,
+        "grid_mapping": "spatial_ref"
+    })
+
+
+    ds["x"].attrs.update({"standard_name": "projection_x_coordinate", "units": "m"})
+    ds["y"].attrs.update({"standard_name": "projection_y_coordinate", "units": "m"})
+    ds["z"].attrs.update({"standard_name": "depth", "positive": "up", "units": "m"})
+
+
     if epsg is not None:
+        ds.attrs["crs"] = f"EPSG:{int(epsg)}"
         ds = ds.rio.write_crs(f"EPSG:{epsg}")
 
     return ds

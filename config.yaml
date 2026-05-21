@@ -1,4 +1,4 @@
-name: test2
+name: test3
 
 #paths
 dir_base: "c:/WERK/DATA/FRESHEM/Interpolation"
@@ -13,6 +13,7 @@ epsg: 28992
 
 # general variables
 variable_name: "RHO"
+variable_unit: "Ohm.m"
 indicators: [1,2,3,5,10,20,30,50,100]
 indicator_bounds: [0.01, 150.0]
 quantiles: [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95]
@@ -29,6 +30,14 @@ features: ['Z', 'OGC_7.5', 'OGC_22.5', 'OGC_37.5', 'OGC_52.5', 'OGC_67.5', 'OGC_
 
 # plotting
 # plotting_depths: [-150, -50, -10, -5, 0.0]
-plotting_depths: [-25,-5]
+plotting_depths: [-25,-10,-5]
 histogram_bins: 50
 histogram_sample_size: 25000
+
+# anisotropy
+aniso_indicator: 5
+aniso_indicator_z_range: 3.0
+aniso_long_axis_min: 500.0
+aniso_long_axis_max: 3000.0
+aniso_short_axis_max: 1000.0
+aniso_long_short_angle_min_diff: 30.0

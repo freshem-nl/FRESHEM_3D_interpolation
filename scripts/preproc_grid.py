@@ -52,6 +52,19 @@ def snap_indicator_probs_to_grid(cfg):
         value_cols=prob_cols,
     )
 
+    ##FLIGHTLINES TO DATASET, FOR USE IN ANYSOTROPY ANALYSIS
+    # FIRST flightline per voxel
+    g = df.groupby(["X", "Y", "Z"], sort=False)[["LINE_NO"]].first()
+
+    # snap flightline no to grid and add to dataset
+    ds = _utils.add_df_to_ds(
+        ds,
+        g.reset_index(),
+        coord_map={"x": "X", "y": "Y", "z": "Z"},
+        value_cols=["LINE_NO"],
+    )
+
+    ##FLIGHTLINES TO DATAFRAME, FOR USE IN CROSS-VALIDATION
     # flightlines per xy-cell
     df_flightlines = df[["X", "Y", "LINE_NO"]].drop_duplicates()
     df_flightlines = _utils.df_to_gdf(df_flightlines, crs=df.crs)

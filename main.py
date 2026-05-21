@@ -6,6 +6,7 @@ from tqdm.auto import tqdm
 
 from scripts import (
     _read_and_write,
+    anisotropy,
     config_loader,
     ml,
     postproc,
@@ -15,6 +16,7 @@ from scripts import (
     visualisation,
     xval,
 )
+
 
 def main(cfg):
     t = datetime.now()
@@ -62,15 +64,19 @@ def main(cfg):
             ds_pred = ml.rf_predict(model, output_names, ds_feat, cfg, ds_pred=ds_pred, xval=True, verbose=False)
         visualisation.plot_ds(ds_pred, "xval", cfg)
 
+    def geostat_anisotropy():
+        anisotropy.main(cfg)
+
     def xval_scoring():
         xval.validation(cfg)
 
-    preprocessing_data()
-    preprocessing_grid()
-    machine_learning()
-    postprocessing()
-    xval_machine_learning()
-    xval_scoring()
+    # preprocessing_data()
+    # preprocessing_grid()
+    # machine_learning()
+    # postprocessing()
+    # xval_machine_learning()
+    # xval_scoring()
+    geostat_anisotropy()
 
     # total runtime
     print(f"\nTotal runtime: {(datetime.now() - t)}.")
