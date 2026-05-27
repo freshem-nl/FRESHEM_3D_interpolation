@@ -6,7 +6,7 @@ import pandas as pd
 from statistics import NormalDist
 
 from ._preprocessing_helper import snap_to_center_grid, snap_to_center_grid_up, snap_index_regular, interval_to_iz_centers_increasing, expand_iz
-import _utils
+import scripts._utils as _utils
 
 def initiate_dataset(df, cfg):
     print("Initiating gridded dataset with", end=" ")
@@ -40,37 +40,42 @@ def initiate_dataset(df, cfg):
     # build dataset
     ds = xr.Dataset(coords={"x": x, "y": y, "z": z})
 
-    print(f"shape: {ds.sizes}, total voxels: {ds.sizes['x'] * ds.sizes['y'] * ds.sizes['z']}")
+    print(f"shape: {ds.sizes}, total voxels: {(ds.sizes['x'] * ds.sizes['y'] * ds.sizes['z']):,}")
 
     return ds
     
-def snap_measurements_to_grid(df, ds):
+def resample_layers_to_grid(df, ds, cfg):
+
+    # from config
+    doi_name = cfg["doi_name"]
+    variable_name = cfg["variable_name"]
 
     t0 = datetime.now()
     print("Snapping measurements to grid...")
 
-    n_measuements = 0
+    n_layers = 0
     n_dropped = 0
     meas_gridded_per_layer = []
     layer_numbers = [int(x.split('_')[1]) for x in df.columns if x.startswith("RHO") and not "STD" in x]
     for i in layer_numbers:
     # for i in [15]:
         print(f"\tLayer {i}:", end=" ")
-        df_sel = df[['LINE_NO', 'X', 'Y', "ELEVATION", f"RHO_{i}",f"RHO_STD{i}", f"DEP_TOP_{i}", f"DEP_BOT_{i}", "DOI_STANDARD"]].copy()
+        df_sel = df[['LINE_NO', 'X', 'Y', "ELEVATION", f"{variable_name}_{i}",f"{variable_name}_STD{i}", f"DEP_TOP_{i}", f"DEP_BOT_{i}", doi_name]].copy()
+        n_layers += len(df_sel)
 
         # rename to stable names
-        df_sel = df_sel.rename(columns={f'RHO_{i}': 'rho', f'RHO_STD{i}': 'rho_std'})
+        df_sel = df_sel.rename(columns={f'{variable_name}_{i}': variable_name, f'{variable_name}_STD{i}': f"{variable_name}_STD"})
 
         df_sel['Z_TOP'] = df_sel['ELEVATION'] - df_sel[f"DEP_TOP_{i}"]
         df_sel['Z_BOT'] = df_sel['ELEVATION'] - df_sel[f"DEP_BOT_{i}"]
-        df_sel['DOI_Z'] = df_sel['ELEVATION'] - df_sel["DOI_STANDARD"]
+        df_sel['DOI_Z'] = df_sel['ELEVATION'] - df_sel[doi_name]
 
         # ---- DOI handling: clip bottoms to DOI, then drop intervals fully below DO
         n0 = len(df_sel)
         df_sel['Z_BOT'] = np.maximum(df_sel['Z_BOT'], df_sel['DOI_Z'])
         df_sel = df_sel[df_sel['Z_TOP'] > df_sel['DOI_Z']]
         n_dropped += (n0 - len(df_sel))
-        print(f"dropped {n0 - len(df_sel)} below DOI_STANDARD", end=", ")
+        print(f"{n0 - len(df_sel):,} layers dropped below {doi_name}", end=", ")
 
         # XY -> indices on ds grid
         df_sel["ix"] = snap_index_regular(df_sel["X"], ds['x'])
@@ -82,25 +87,28 @@ def snap_measurements_to_grid(df, ds):
         n1 = len(df_sel)
         df_sel = df_sel.loc[~df_sel["empty"]].copy()
         n_dropped += (n1 - len(df_sel))
-        print(f"dropped {n1 - len(df_sel)} intervals not intersecting any z-cell-center")
+        print(f"{n1 - len(df_sel):,} not intersecting any z-cell-center")
 
         if len(df_sel) == 0:
             continue
 
-        n_measuements += len(df_sel)
-
         # Expand interval rows -> voxel-hit rows
-        vox_long = expand_iz(df_sel, cols_to_repeat=("LINE_NO","ix","iy","rho", "rho_std"))
+        vox_long = expand_iz(df_sel, cols_to_repeat=("LINE_NO","ix","iy",variable_name, f"{variable_name}_STD"))
         meas_gridded_per_layer.append(vox_long)
 
     # Combine all layers' voxel hits
     gridded_measurements = pd.concat(meas_gridded_per_layer, ignore_index=True)
 
-    print(f"...Snapped {n_measuements} measurements to grid, dropped {n_dropped} measurements.\n...Results in {len(gridded_measurements.groupby(['ix','iy','iz']))} voxels containing {gridded_measurements.shape[0]} measurements.")
+    print(f"...resampled {n_layers:,} layers to {gridded_measurements.shape[0]:,} measurements, dropped {n_dropped:,} layers.\n...Results in {len(gridded_measurements.groupby(['ix','iy','iz'])):,} voxels containing a measurement")
 
     return gridded_measurements
 
 def quantiles_per_voxel(measurements_gridded, ds, cfg):
+
+    # from config
+    path_output = cfg['path_preproc_data']
+    variable_name = cfg["variable_name"]
+
     t0 = datetime.now()
     print(f"Computing percentiles per voxel...", end=" ")
 
@@ -114,16 +122,16 @@ def quantiles_per_voxel(measurements_gridded, ds, cfg):
     z = np.array([NormalDist().inv_cdf(q) for q in qs])  # z-scores
 
     # column names for the quantiles to be stored in the output dataframe
-    qcols = [f"rho_p{int(q*100):02d}" for q in qs]
+    qcols = [f"{variable_name}_p{int(q*100):02d}" for q in qs]
 
     # mean of means
-    mu = gb["rho"].mean()
+    mu = gb[variable_name].mean()
 
     # variance of means
-    var_between = gb["rho"].var(ddof=0).fillna(0.0)
+    var_between = gb[f"{variable_name}_STD"].var(ddof=0).fillna(0.0)
 
     # mean of variances
-    var_within  = gb["rho_std"].apply(lambda s: np.mean(np.square(s.to_numpy(float))))
+    var_within  = gb[f"{variable_name}_STD"].apply(lambda s: np.mean(np.square(s.to_numpy(float))))
 
     # total variance = variance of means + mean of variances
     sigma = np.sqrt(var_between + var_within)
@@ -138,13 +146,16 @@ def quantiles_per_voxel(measurements_gridded, ds, cfg):
     ds = _utils.add_to_dataset(qdf_norm, ds)
 
     # save dataset
-    path = cfg['dir_output'] / "data_quantiles.nc"
-    _utils.save_dataset(ds, path)
+    _utils.save_dataset(ds, path_output)
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
-
+    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s)")
 
 def flightlines_per_voxel(measurements_gridded, cfg):
+
+    # from config
+    path_output = cfg["path_voxel_flightlines"]
+
+
     t0 = datetime.now()
     print(f"Computing flightlines per voxel...", end=" ")
     # counts of measurements per voxel per flightline
@@ -169,7 +180,6 @@ def flightlines_per_voxel(measurements_gridded, cfg):
     line_counts = line_counts.merge(voxel_n, on=["ix", "iy", "iz"], how="left")
     line_counts["flightline_fraction"] = line_counts["n_from_flightline"] / line_counts["n_total"]
 
-    path = cfg["dir_output"] / "voxel_flightlines_contribution.parquet"
-    line_counts.to_parquet(path, engine="fastparquet")
+    line_counts.to_parquet(path_output, engine="fastparquet")
 
     print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")

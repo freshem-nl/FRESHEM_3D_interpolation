@@ -1,22 +1,86 @@
-from scripts import config_loader, readers
-from pathlib import Path
 import os
-from scripts import readers, preprocessing
+from datetime import datetime
+from pathlib import Path
+
+from tqdm.auto import tqdm
+
+from scripts import (
+    _read_and_write,
+    anisotropy,
+    config_loader,
+    ml,
+    postproc,
+    preproc_data,
+    preproc_grid,
+    preproc_ml,
+    visualisation,
+    xval,
+)
+
 
 def main(cfg):
+    t = datetime.now()
 
-    def preproc():
-        df = readers.read_skytem_xyz(cfg["path_input"])
-        ds = preprocessing.initiate_dataset(df, cfg)
-        measurements_gridded = preprocessing.snap_measurements_to_grid(df, ds)
-        preprocessing.quantiles_per_voxel(measurements_gridded, ds, cfg)
-        preprocessing.flightlines_per_voxel(measurements_gridded, cfg)
+    # copy config file
+    path = cfg["dir_output"] / "config.yaml"
+    _read_and_write.write_yaml(cfg, path)
 
-    def anisotropy():
-        pass
+    def preprocessing_data():
+        df = _read_and_write.read_skytem_xyz(cfg)
+        df = preproc_data.drop_below_doi_and_resample_layers_to_z(df, cfg)
+        df = preproc_data.quantiles_and_indicator_probs(df, cfg)
+        visualisation.plot_df(df, "preproc - data", cfg)
 
-    preproc()
-    anisotropy()
+    def preprocessing_grid():
+        ds = preproc_grid.snap_indicator_probs_to_grid(cfg)
+        mask_xy = preproc_grid.mask_xy(ds, cfg)
+        mask_z = preproc_grid.mask_z(ds, cfg)
+        ds = preproc_grid.combine_masks(ds, mask_xy, mask_z, cfg)
+        visualisation.plot_ds(ds, "preproc - gridded data", cfg)
+
+    def machine_learning():
+        df, ds_feat = preproc_ml.OGC(cfg)
+        model, output_names = ml.rf_train(df, cfg)
+        ds_pred = ml.rf_predict(model, output_names, ds_feat, cfg)
+        visualisation.plot_ds(ds_pred, "pred", cfg)
+
+    def postprocessing():
+        ds = postproc.ds_ind_probs_to_quantiles(cfg)
+        visualisation.plot_ds(ds, "postproc", cfg)
+        _read_and_write.ds_to_tiff(ds, cfg["dir_rasters"], "postproc")
+
+    def xval_machine_learning():
+        df, ds_feat = preproc_ml.OGC(cfg)
+        lines = xval.xval_lines(cfg)
+        model_mask = ds_feat["mask"].copy()  # overall mask for reuse
+        ds_pred = None
+        txt = "crossvalidation: train without data of line, predict on line"
+        for line in tqdm(lines["LINE_NO"].unique(), desc=txt, unit="line", leave=True):
+            # exclude line from training data, exclude outside mask from prediction grid
+            df_train = df[df["LINE_NO"] != line].copy()  # exclude line
+            ds_feat["mask"] = xval.mask_line(lines, model_mask, line)  # include line only
+            # train and predict
+            model, output_names = ml.rf_train(df_train, cfg, verbose=False)  # train
+            ds_pred = ml.rf_predict(model, output_names, ds_feat, cfg, ds_pred=ds_pred, xval=True, verbose=False)
+        visualisation.plot_ds(ds_pred, "xval", cfg)
+
+    def geostat_anisotropy():
+        anisotropy.main(cfg)
+
+    def xval_scoring():
+        xval.validation(cfg)
+
+    # preprocessing_data()
+    # preprocessing_grid()
+    # machine_learning()
+    # postprocessing()
+    # xval_machine_learning()
+    # xval_scoring()
+    geostat_anisotropy()
+
+    # total runtime
+    print(f"\nTotal runtime: {(datetime.now() - t)}.")
+
 
 if __name__ == "__main__":
 
