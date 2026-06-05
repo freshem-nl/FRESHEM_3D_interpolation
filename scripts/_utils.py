@@ -21,7 +21,7 @@ def init_ds(df, cellsize_xy=None, cellsize_z=None, epsg=None, buffer_xy=0, buffe
 
     z = np.arange(df["Z"].min() - buffer_z, df["Z"].max() + buffer_z + cellsize_z, cellsize_z)
 
-    ds = xr.Dataset(coords={"x": x, "y": y, "z": z})
+    ds = xr.Dataset(coords={"Z": z, "Y": y, "X": x})
 
 
     ds.attrs.update({
@@ -32,19 +32,21 @@ def init_ds(df, cellsize_xy=None, cellsize_z=None, epsg=None, buffer_xy=0, buffe
     })
 
 
-    ds["x"].attrs.update({"standard_name": "projection_x_coordinate", "units": "m"})
-    ds["y"].attrs.update({"standard_name": "projection_y_coordinate", "units": "m"})
-    ds["z"].attrs.update({"standard_name": "depth", "positive": "up", "units": "m"})
+    ds["X"].attrs.update({"standard_name": "X", "units": "m"})
+    ds["Y"].attrs.update({"standard_name": "Y", "units": "m"})
+    ds["Z"].attrs.update({"standard_name": "Z", "positive": "up", "units": "m"})
 
 
     if epsg is not None:
         ds.attrs["crs"] = f"EPSG:{int(epsg)}"
         ds = ds.rio.write_crs(f"EPSG:{epsg}")
+        ds = ds.rio.set_spatial_dims(x_dim="X", y_dim="Y")
+
 
     return ds
 
 
-def add_df_to_ds(ds, df, coord_map=None, value_cols=None, dtype="float32"):
+def add_df_to_ds(ds, df, value_cols=None, dtype="float32"):
     """
     Add one or more value columns from a DataFrame to an xarray Dataset.
 
@@ -54,8 +56,6 @@ def add_df_to_ds(ds, df, coord_map=None, value_cols=None, dtype="float32"):
         Must have coordinates ds.x, ds.y, ds.z (cell centers).
     df : pandas.DataFrame
         Must contain coordinate columns (e.g. X,Y,Z) and one or more value columns.
-    coord_map : dict
-        Mapping from ds coord name -> df column name, default {"x":"X","y":"Y","z":"Z"}.
     value_cols : list or None
         Which df columns to write. If None: all columns except coord columns.
     dtype : str
@@ -65,25 +65,22 @@ def add_df_to_ds(ds, df, coord_map=None, value_cols=None, dtype="float32"):
     -------
     ds : xarray.Dataset (modified)
     """
-    if coord_map is None:
-        coord_map = {"x": "X", "y": "Y", "z": "Z"}
-
     # Identify coordinate columns in df
-    df_coord_cols = [coord_map["x"], coord_map["y"], coord_map["z"]]
+    df_coord_cols = ["X", "Y", "Z"]
 
     # Auto-detect value columns if not provided
     if value_cols is None:
         value_cols = [c for c in df.columns if c not in df_coord_cols]
 
     # Grid coords
-    x = ds.x.values
-    y = ds.y.values
-    z = ds.z.values
+    x = ds.X.values
+    y = ds.Y.values
+    z = ds.Z.values
 
     # Map centers -> indices (assumes df coords match ds coords)
-    ix = np.searchsorted(x, df[coord_map["x"]].to_numpy())
-    iy = np.searchsorted(y, df[coord_map["y"]].to_numpy())
-    iz = np.searchsorted(z, df[coord_map["z"]].to_numpy())
+    ix = np.searchsorted(x, df['X'].to_numpy())
+    iy = np.searchsorted(y, df['Y'].to_numpy())
+    iz = np.searchsorted(z, df['Z'].to_numpy())
 
     # value
     dfv = df.loc[:, value_cols]
@@ -92,7 +89,7 @@ def add_df_to_ds(ds, df, coord_map=None, value_cols=None, dtype="float32"):
     shape = (len(z), len(y), len(x))
     for c in value_cols:
         if c not in ds:
-            ds[c] = (("z", "y", "x"), np.full(shape, np.nan, dtype=dtype))
+            ds[c] = (("Z", "Y", "X"), np.full(shape, np.nan, dtype=dtype))
         ds[c].values[iz, iy, ix] = dfv[c].to_numpy()
 
     return ds

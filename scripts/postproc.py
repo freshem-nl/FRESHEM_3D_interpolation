@@ -3,7 +3,7 @@ from datetime import datetime
 import numpy as np
 import xarray as xr
 
-from scripts import _postproc_helper, _read_and_write
+from scripts import _postproc_helper
 
 
 def ds_ind_probs_to_quantiles(cfg):
@@ -19,7 +19,7 @@ def ds_ind_probs_to_quantiles(cfg):
     bounds = cfg["indicator_bounds"]
 
     # read predictions
-    ds_ind_probs = _read_and_write.read_dataset(path_pred)
+    ds_ind_probs = read_and_write.read_dataset(path_pred)
 
     indicator_col_names = [f"P({i})" for i in indicators]
 
@@ -49,8 +49,27 @@ def ds_ind_probs_to_quantiles(cfg):
         ds_quant[v] = ds_newvars[v]
 
     # save dataset
-    _read_and_write.write_dataset(ds_quant, path_output)
+    read_and_write.write_dataset(ds_quant, path_output)
 
     print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
 
     return ds_quant
+
+def ensure_monotonicity(ds, cfg):
+
+    cols = cfg["indicator_names"]
+
+    ## ensure values between 0 and 1, and monotonicity (increasing with threshold)
+    arr = np.stack([ds[v].values for v in cols], axis=0)
+
+    # all values between 0 and 1
+    arr = np.clip(arr, 0.0, 1.0)
+
+    # ensure monotonicity (increasing with threshold)
+    arr = np.maximum.accumulate(arr, axis=0)
+
+    # write back to dataset
+    for i, v in enumerate(cols):
+        ds[v].data = arr[i]
+    
+    return ds

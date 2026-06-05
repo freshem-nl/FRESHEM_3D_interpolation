@@ -5,7 +5,7 @@ import pandas as pd
 import xarray as xr
 from sklearn.metrics import classification_report, confusion_matrix
 
-from scripts import _postproc_helper, _read_and_write, _scoring, visualisation
+from scripts import _postproc_helper, _scoring, visualisation
 
 
 def xval_lines(cfg):
@@ -19,14 +19,14 @@ def xval_lines(cfg):
     print(f"\nselect {n_lines} lines", end="... ")
 
     # read flightlines
-    xy_lines = _read_and_write.read_table(path_flightlines)
+    xy_lines = read_and_write.read_table(path_flightlines)
 
     # Count number of points per line
     counts = xy_lines.groupby("LINE_NO").size().sort_values(ascending=False)
 
     # select top_lines from the longest lines, at least 50% of the lines
     n_lines_total = xy_lines["LINE_NO"].nunique()
-    fraction_to_select = n_lines/n_lines_total
+    fraction_to_select = n_lines / n_lines_total
     fraction_to_select_from = max(0.5, fraction_to_select)  # at least top 50% lines
     n_top = int(np.ceil(len(counts) * fraction_to_select_from))
     top_lines = counts.index[:n_top].tolist()
@@ -39,7 +39,7 @@ def xval_lines(cfg):
     # filter xy_lines to selected lines
     xy_lines_selected = xy_lines[xy_lines["LINE_NO"].isin(selected_lines)].copy()
 
-    print(f'done ({(datetime.now() - t0).total_seconds():.2f}s).')
+    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
 
     return xy_lines_selected
 
@@ -90,8 +90,8 @@ def validation(cfg):
     ind_cols = [f"P({b:g})" for b in inds]
 
     # read datasets
-    ds_obs = _read_and_write.read_dataset(path_obs)
-    ds_pred = _read_and_write.read_dataset(path_pred)
+    ds_obs = read_and_write.read_dataset(path_obs)
+    ds_pred = read_and_write.read_dataset(path_pred)
 
     # convert to dataframes and drop non-data variables and NaNs
     df_obs = ds_obs.to_dataframe().drop(columns=["spatial_ref", "mask"]).dropna()
@@ -155,6 +155,6 @@ def validation(cfg):
 
     # save results
     path = dir_data / "xval - rps.parquet"
-    _read_and_write.write_table(rps, path)
+    read_and_write.write_table(rps, path)
 
     print(f"...done ({(datetime.now() - t0).total_seconds():.2f}s).")

@@ -1,8 +1,9 @@
 from datetime import datetime
 
-from scripts import _read_and_write, _anisotropy_helper, visualisation
 import numpy as np
 import xarray as xr
+
+from scripts import _anisotropy_helper, visualisation
 
 
 def main(cfg):
@@ -22,12 +23,11 @@ def main(cfg):
     min_long_short_angle_diff = cfg["aniso_long_short_angle_min_diff"]
     plotting_depths = cfg["plotting_depths"]
 
-    dir_plot = cfg['dir_plot']
+    dir_plot = cfg["dir_plot"]
     variable_unit = cfg["variable_unit"]
 
-
     # read data
-    ds = _read_and_write.read_dataset(path_gridded_data)
+    ds = read_and_write.read_dataset(path_gridded_data)
 
     # Create boolean mask of gridcells containing data
     ds["data_mask"] = ds[f"P({indicator})"].notnull()
@@ -161,9 +161,9 @@ def main(cfg):
     ds["long_dist"] = (("z", "y", "x"), long_dist)
     ds["long_angle"] = (("z", "y", "x"), long_angle)
 
-    _read_and_write.write_dataset(ds, cfg["path_data_anisotropy"])
+    read_and_write.write_dataset(ds, cfg["path_data_anisotropy"])
 
-    #VISUALISATION
+    # VISUALISATION
     # select target depths (exact match or nearest)
     target_depths = np.array(plotting_depths)
     depths = ds["z"].sel(z=target_depths, method="nearest").values
@@ -171,32 +171,31 @@ def main(cfg):
     for z in depths:
         sl = ds.sel(z=z)
 
-        data_mask = sl["data_mask"]            # bool
+        data_mask = sl["data_mask"]  # bool
         fresh_mask = sl["fresh_mask"]
 
         bg = xr.where(~data_mask, -1, xr.where(fresh_mask, 1, 0)).astype(np.int8)
-                                                                
+
         # max_angle/max_dist/min_dist are your numpy 2D arrays from the loop
-        path = dir_plot / 'depth_slices'/ f"data - anisotropy at z={z}m.png"
+        path = dir_plot / "depth_slices" / f"data - anisotropy at z={z}m.png"
         visualisation.anisotropy(
             sl,
             bg,
             max_angle=sl["long_angle"].values,
             max_dist=sl["long_dist"].values,
             min_dist=sl["short_dist"].values,
-            stride=2,         # tune: 8..20 typically
+            stride=2,  # tune: 8..20 typically
             scale=0.2,
             alpha=0.5,
             lw=0.6,
             edgecolor="black",
             variable_value=indicator,
             variable_unit=variable_unit,
-            use_half_long=True,   # often correct if max_dist is fwd+bwd total
+            use_half_long=True,  # often correct if max_dist is fwd+bwd total
             use_half_short=False,  # min_dist is single-direction -> treat as radius
-            path = path
+            path=path,
         )
 
     print(f"done ({datetime.now() - t0})")
 
     return ds
-

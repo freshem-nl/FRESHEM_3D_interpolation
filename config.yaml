@@ -1,4 +1,5 @@
-name: test3
+name: reorder3
+method: "geostat" # geostat, ml
 
 #paths
 dir_base: "c:/WERK/DATA/FRESHEM/Interpolation"
@@ -22,6 +23,15 @@ cellsize_z: 1.0
 buffer_xy: 300
 buffer_z: 3
 xval_n_lines: 3
+
+#geostat variables
+variogram_model_range_xy: 1000.0
+variogram_model_range_z: 2.01
+neighbourhood_dist_xy: 1000.0
+neighbourhood_dist_z: 0.99
+neighbourhood_n_sectors: 4
+neighbourhood_max_neigh_per_sector: 4
+    
 
 # ml variables
 OGC_angles: [7.5,22.5,37.5,52.5,67.5,82.5,97.5,112.5,127.5,142.5,157.5,172.5]

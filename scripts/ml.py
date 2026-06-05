@@ -3,10 +3,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import xarray as xr
-from joblib import dump
 from sklearn.ensemble import RandomForestRegressor
-
-from scripts import _read_and_write
 
 
 def rf_train(df, cfg, verbose=True):
@@ -44,84 +41,125 @@ def rf_train(df, cfg, verbose=True):
     return model, output_names
 
 
-def rf_predict(model, output_names, ds_feat, cfg, ds_pred=None, xval=False, verbose=True):
+def rf_predict(model, output_names, pred, cfg, xval=False, verbose=True):
 
     t0 = datetime.now()
 
     # from config
     features = cfg["features"]
-    if xval:
-        path_output = cfg["path_prediction_xval"]
-    else:
-        path_output = cfg["path_prediction"]
+    
+    feature_arrays = []
+    for var in features:
 
-    # if needed: coordinates to features
-    for var in ["X", "Y", "Z"]:
-        if var in features:
-            # Create a 3D feature (z,y,x) that matches mask
-            da = ds_feat[var.lower()].broadcast_like(ds_feat["mask"]).rename(var)
-            ds_feat = ds_feat.assign({var: da})
+        # Get feature from data_vars or coords
+        if var in pred.data_vars:
+            da = pred[var]
+        elif var in pred.coords:
+            da = pred.coords[var]
 
-    # Stack spatial dims for features
-    X_da = (
-        ds_feat[features]
-        .copy()
-        .to_array("feature")  # (feature, z, y, x)
-        .transpose("z", "y", "x", "feature")  # (z, y, x, feature)
-        .stack(cell=("z", "y", "x"))
-        .transpose("cell", "feature")  # (cell, feature)
-    )
+        # Broadcast feature to full 3D grid
+        if not set(da.dims).issubset(pred["mask"].dims):
+            raise ValueError(f"Feature '{var}' has incompatible dims {da.dims}")
 
-    # Apply mask
-    mask_1d = ds_feat["mask"].stack(cell=("z", "y", "x"))
+        da = da.broadcast_like(pred["mask"]).transpose("Z", "Y", "X")
 
-    # valid cell = inside mask AND all features finite
-    valid = mask_1d.values & np.isfinite(X_da).all("feature").values
+        # Add feature dimension while preserving the original feature name
+        da = da.expand_dims(feature=[var])
 
-    # to dataframe for sklearn
-    X_pred = pd.DataFrame(X_da.values[valid].astype(np.float32, copy=False), columns=features)
+        feature_arrays.append(da)
+
+    # Combine all features into one DataArray: (Z, Y, X, feature)
+    X_da = xr.concat(feature_arrays, dim="feature").transpose("Z", "Y", "X", "feature")
+
+    # Stack spatial dims
+    X_da = X_da.stack(cell=("Z", "Y", "X"), create_index=False).transpose("cell", "feature")
+
+    # Stack mask in exactly the same way: (cell,)
+    mask_1d = pred["mask"].transpose("Z", "Y", "X").stack(cell=("Z", "Y", "X"), create_index=False)
+
+    # Build prediction dataframe
+    X_pred = pd.DataFrame(X_da.values[mask_1d].astype(np.float32, copy=False), columns=X_da["feature"].values)
+
+    # # if needed: coordinates to features
+    # for var in features:
+    #     # Create a 3D feature (z,y,x) that matches mask
+    #     da = pred[var].broadcast_like(pred["mask"]).rename(var)
+    #     pred = pred.assign({var: da})
+
+    # # Stack spatial dims for features
+    # X_da = (
+    #     pred[features]
+    #     .copy()
+    #     .to_array("feature")  # (feature, z, y, x)
+    #     .transpose("Z", "Y", "X", "feature")  # (z, y, x, feature)
+    #     .stack(cell=("Z", "Y", "X"), create_index=False)  # (cell, feature)
+    #     .transpose("cell", "feature")  # (cell, feature)
+    # )
+
+    # # Apply mask
+    # mask_1d = pred["mask"].stack(cell=("Z", "Y", "X"), create_index=False)  # (cell,)
+
+    # # valid cell = inside mask AND all features finite
+    # valid = mask_1d.values & np.isfinite(X_da).all("feature").values
+
+    # # to dataframe for sklearn
+    # X_pred = pd.DataFrame(X_da.values[valid].astype(np.float32, copy=False), columns=features)
 
     if verbose:
         print(f"Predicting on {len(X_pred)} voxels...", end=" ")
     y_pred = model.predict(X_pred)
 
+
+    y_pred = np.asarray(y_pred)
     if y_pred.ndim == 1:
         y_pred = y_pred[:, None]
-    elif y_pred.ndim == 2:
-        pass
+
+
+    # for i, out_name in enumerate(output_names):
+    #     full = np.full(mask_1d.size, np.nan, dtype=np.float32)
+    #     full[mask_1d] = y_pred[:, i]
+
+    #     pred[out_name] = xr.DataArray(
+    #         full.reshape(pred.sizes["Z"], pred.sizes["Y"], pred.sizes["X"]),
+    #         dims=("Z", "Y", "X"),
+    #         coords=pred.coords,
+    #     )
+
 
     # Make a (cell, output) array filled with NaN
     full = np.full((mask_1d.size, len(output_names)), np.nan, dtype=np.float32)
-    full[valid, :] = y_pred.astype(np.float32, copy=False)
+    full[mask_1d.values, :] = y_pred.astype(np.float32, copy=False)
 
-    # Create DataArray with same coords as mask
-    pred_cell = xr.DataArray(
-        full,
-        coords={"cell": mask_1d["cell"], "output": output_names},
-        dims=("cell", "output"),
-    )
 
-    # unstack back to (z,y,x) and separate outputs into different DataArrays
-    pred_grid = pred_cell.unstack("cell").transpose("output", "z", "y", "x")  # (z,y,x,output)  # (output,z,y,x)
+    # Reshape back to grid: (Z, Y, X, output) -> (output, Z, Y, X)
+    pred_grid = xr.DataArray(
+        full.reshape(pred.sizes["Z"], pred.sizes["Y"], pred.sizes["X"], len(output_names)),
+        coords={"Z": pred["Z"], "Y": pred["Y"], "X": pred["X"], "output": output_names},
+        dims=("Z", "Y", "X", "output"),
+    ).transpose("output", "Z", "Y", "X")
 
-    if ds_pred is None:
-        # Create new dataset with predictions as separate DataArrays (if multiple outputs)
-        ds_pred = xr.Dataset(coords=ds_feat.coords, attrs=ds_feat.attrs)
+    # # Create DataArray with same coords as mask
+    # pred_cell = xr.DataArray(
+    #     full,
+    #     coords={"cell": mask_1d["cell"], "output": output_names},
+    #     dims=("cell", "output"),
+    # )
+
+    # # unstack back to (z,y,x) and separate outputs into different DataArrays
+    # pred_grid = pred_cell.unstack("cell").transpose("output", "Z", "Y", "X")  # (z,y,x,output)  # (output,z,y,x)
 
     # Add predicted outputs to dataset, replacing values where prediction is not NaN
     for name in output_names:
         new = pred_grid.sel(output=name).drop_vars("output")
 
-        if name not in ds_pred:
-            ds_pred[name] = new
+        if name not in pred:
+            pred[name] = new
         else:
-            old = ds_pred[name]
-            ds_pred[name] = xr.where(new.notnull(), new, old)
+            old = pred[name]
+            pred[name] = xr.where(new.notnull(), new, old)
 
-    # save predictions
-    _read_and_write.write_dataset(ds_pred, path_output)
 
     if verbose:
         print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
 
-    return ds_pred
+    return pred

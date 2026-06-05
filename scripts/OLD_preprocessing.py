@@ -5,7 +5,7 @@ import pandas as pd
 
 from statistics import NormalDist
 
-from ._preprocessing_helper import snap_to_center_grid, snap_to_center_grid_up, snap_index_regular, interval_to_iz_centers_increasing, expand_iz
+from ._preproc_helper import snap_to_center_grid, snap_to_center_grid_up, snap_index_regular, interval_to_iz_centers_increasing, expand_iz
 import scripts._utils as _utils
 
 def initiate_dataset(df, cfg):
