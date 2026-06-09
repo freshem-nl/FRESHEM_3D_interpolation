@@ -39,7 +39,7 @@ def skytem_xyz(cfg):
     if path_output.exists():
         print(f"Reading {path_output}...", end=" ")
         df = table(path_output)
-        print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+        print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
         return df
     else:
 
@@ -122,7 +122,7 @@ def skytem_xyz(cfg):
         write.table(df, path_output)
 
         txt = (
-            f"done ({(datetime.now() - t0).total_seconds():.2f}s). Read {len(df)} rows with {len(df.columns)} columns."
+            f"({(datetime.now() - t0).total_seconds():.2f}s). Read {len(df)} rows with {len(df.columns)} columns"
         )
         print(txt)
 

@@ -13,7 +13,6 @@ def rf_train(df, cfg, verbose=True):
     # from config
     features = cfg["features"]
     indicators = cfg["indicators"]
-    dir_output = cfg["dir_output"]
     n_trees = cfg["rf_n_trees"]
 
     output_names = [f"P({x})" for x in indicators]
@@ -28,6 +27,7 @@ def rf_train(df, cfg, verbose=True):
     X = df[features]
     y = df[output_names]
     if verbose:
+        print("\nSPATIAL INTERPOLATION")
         print(f"Training random forest on {len(X)} samples...", end=" ")
     model.fit(X, y)
 

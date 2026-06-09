@@ -98,7 +98,7 @@ def drop_below_doi_and_resample_layers_to_z(df, cfg):
     # Convert to geodataframe
     df_z = _utils.df_to_gdf(df_z, epsg=epsg)
 
-    txt = f"...resampled {n_layers:,} layers to {df_z.shape[0]:,} measurements, dropped {n_dropped:,} layers ({(datetime.now() - t0).total_seconds():.2f}s)."
+    txt = f"...resampled {n_layers:,} layers to {df_z.shape[0]:,} measurements, dropped {n_dropped:,} layers ({(datetime.now() - t0).total_seconds():.2f}s)"
     print(txt)
 
     return df_z
@@ -153,6 +153,6 @@ def quantiles_and_indicator_probs(df, cfg):
     # --- 4) merge back
     df_out = df.merge(unique_out, on=[mu_col, sd_col], how="left", sort=False)
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
     return df_out

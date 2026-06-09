@@ -1,4 +1,4 @@
-name: reorder3
+name: test
 method: "geostat" # geostat, ml
 
 #paths

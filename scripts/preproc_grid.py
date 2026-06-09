@@ -62,7 +62,7 @@ def snap_data_to_grid(df, cfg):
 
     df_flightlines.to_parquet(path_flightlines_out.with_suffix(".parquet"))
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
     return ds
 
@@ -88,7 +88,7 @@ def mask_xy(data_g, cfg):
     dist_m = distance_transform_edt(~has_data_xy, sampling=(cellsize_xy, cellsize_xy))
     mask_xy = dist_m <= buffer_xy
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
     return mask_xy
 
@@ -147,7 +147,7 @@ def mask_z(ds, cfg):
     # mask where Z3 in between top_surf and bot_surf (with buffer)
     mask_z = ((Z3 <= top_surf) & (Z3 >= bot_surf)).rename("mask_z")
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
     return mask_z
 
@@ -161,7 +161,7 @@ def combine_masks(data_g, mask_xy, mask_z):
 
     pred_g = xr.Dataset(data_vars={"mask": mask},coords=data_g.coords,attrs=data_g.attrs)
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
     return pred_g
 
@@ -204,4 +204,4 @@ def plotting(ds, cfg):
             path = dir_plot / f"data gridded - {var} at z={depth}m.png"
             plt.savefig(path, dpi=300, bbox_inches="tight")
             plt.close()
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")

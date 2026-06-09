@@ -1,14 +1,19 @@
+from datetime import datetime
+
 import isatis as isa
 import isatis.constants as cst
 import numpy as np
-from datetime import datetime
+import pandas as pd
+import xarray as xr
 
 isa.setLicenseString("52100@lic-isatis.tno.nl")
 
 
-def kriging(data, pred, cfg):
+def kriging(data, pred, cfg, verbose=True):
     t0 = datetime.now()
-    print("KRIGING")
+    if verbose:
+        print("\nSPATIAL INTERPOLATION")
+        print("indicator kriging...", end=" ")
 
     # From config
     indicator_names = cfg["indicator_names"]
@@ -20,36 +25,24 @@ def kriging(data, pred, cfg):
     neigh_max_neigh_per_sector = cfg["neighbourhood_max_neigh_per_sector"]
 
     # Create Isatis input database
-    input_db = isa.DbPandas(data.to_dataframe().reset_index())
+    input_db = isa.DbPandas(data.to_dataframe().dropna().reset_index())
 
     # Use one fixed dimension order for everything sent to Isatis
     pred_xyz = pred.transpose("X", "Y", "Z")
 
     # Create Isatis output grid
-    grid = isa.GridGeom(origin=[
-                            pred_xyz["X"].values.min(),
-                            pred_xyz["Y"].values.min(),
-                            pred_xyz["Z"].values.min()],
-                        cell_size=[
-                            pred_xyz.attrs["cellsize_x"],
-                            pred_xyz.attrs["cellsize_y"],
-                            pred_xyz.attrs["cellsize_z"]],
-                        nxyz=[
-                            pred_xyz.sizes["X"],
-                            pred_xyz.sizes["Y"],
-                            pred_xyz.sizes["Z"]],
-                        ndim=3)
+    grid = isa.GridGeom(
+        origin=[pred_xyz["X"].values.min(), pred_xyz["Y"].values.min(), pred_xyz["Z"].values.min()],
+        cell_size=[pred_xyz.attrs["cellsize_x"], pred_xyz.attrs["cellsize_y"], pred_xyz.attrs["cellsize_z"]],
+        nxyz=[pred_xyz.sizes["X"], pred_xyz.sizes["Y"], pred_xyz.sizes["Z"]],
+        ndim=3,
+    )
 
     # Build output dataframe in the exact same grid order
+    mask = pred_xyz["mask"].values.ravel()
+    cell_id = np.arange(mask.size, dtype=np.int64)
 
-    base_df = pred_xyz["mask"].to_dataframe().reset_index()
-
-    # Assign a unique cell id in the exact original flat order
-    base_df["cell_id"] = np.arange(len(base_df), dtype=np.int64)
-
-    # Keep only fields needed for the output database
-    df_out = base_df[["mask", "cell_id"]].copy()
-
+    df_out = pd.DataFrame({"mask": mask, "cell_id": cell_id})
 
     output_db = isa.DbPandas(df_out, grid=grid)
 
@@ -87,33 +80,34 @@ def kriging(data, pred, cfg):
     output_db = runner.kriging(model=multi_vario, neigh=neigh)
 
     # Isatis database to dataframe
-    output_df = output_db.df().copy()
+    output_df = output_db.df()
     output_df.columns = output_df.columns.str.removesuffix("_" + runner.kriging_suffix)
-    
+
     # Sort back to the original cell order
     output_df = output_df.sort_values("cell_id").reset_index(drop=True)
 
     # Keep only prediction columns
     values = output_df[indicator_names].to_numpy(dtype=np.float32)
 
-
     # Write results back to dataset
-    pred_out = pred.copy()
     grid_shape = pred_xyz["mask"].shape
-    n_cells = np.prod(grid_shape)
-
 
     for i, var in enumerate(indicator_names):
         arr_xyz = values[:, i].reshape(grid_shape)
 
         da = pred_xyz["mask"].copy(data=arr_xyz).astype(np.float32).rename(var)
 
-        # Restore original dimension order
-        pred_out[var] = da.transpose(*pred["mask"].dims)
+        new_da = da.transpose(*pred["mask"].dims)
 
-    print(f"done {datetime.now() - t0}")
+        if var in pred:
+            pred[var] = xr.where(pred["mask"], new_da, pred[var])
+        else:
+            pred[var] = new_da.where(pred["mask"])
 
-    return pred_out
+    if verbose:
+        print(f"done {datetime.now() - t0}")
+
+    return pred
 
 
 # import numpy as np

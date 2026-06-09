@@ -6,7 +6,7 @@ import matplotlib.ticker as mticker
 import numpy as np
 import seaborn as sns
 from matplotlib.collections import PatchCollection
-from matplotlib.colors import BoundaryNorm, ListedColormap, LogNorm
+from matplotlib.colors import BoundaryNorm, ListedColormap, LogNorm, Normalize
 from matplotlib.patches import Ellipse
 from sklearn.metrics import ConfusionMatrixDisplay
 
@@ -29,7 +29,7 @@ def plot_df(df, name, cfg):
 
         histogram(df[var], path, cfg)
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
 
 def plot_ds(ds, name, cfg):
@@ -53,7 +53,6 @@ def plot_ds(ds, name, cfg):
         path = dir_plot / f"{name} - {var} histogram.png"
         histogram(series, path, cfg)
 
-
         # If the variable has a Z dimension: make one plot per target depth
         if "Z" in da.dims:
             plot_items = [(depth, da.sel(Z=depth)) for depth in depths]
@@ -61,17 +60,18 @@ def plot_ds(ds, name, cfg):
         else:
             plot_items = [(None, da)]
 
-
         for depth, da_plot in plot_items:
 
-
             # log colorscale for quantiles, linear for indicators
-            norm = None
             if var.startswith("Q"):
                 vals = da_plot.values
                 vals = vals[np.isfinite(vals) & (vals > 0)]
                 vmin, vmax = np.quantile(vals, [0.02, 0.98])
                 norm = LogNorm(vmin=vmin, vmax=vmax)
+            elif var in indicator_names:
+                norm = Normalize(vmin=0, vmax=1)
+            else:
+                norm = None
 
             # plot map
             da_plot.plot(norm=norm)
@@ -89,7 +89,7 @@ def plot_ds(ds, name, cfg):
             plt.savefig(path, dpi=300, bbox_inches="tight")
             plt.close()
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
 
 def boxplot(df, x=None, y=None, path=None, hue=None, showfliers=True):
