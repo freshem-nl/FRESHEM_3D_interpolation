@@ -1,7 +1,6 @@
 import os
 from datetime import datetime
 
-import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -9,16 +8,15 @@ import xarray as xr
 from scipy.ndimage import distance_transform_edt
 
 import scripts._utils as _utils
-from scripts import _preprocessing_helper, _read_and_write
+from scripts import _preproc_helper
 
 
-def snap_indicator_probs_to_grid(cfg):
+def snap_data_to_grid(df, cfg):
 
     t0 = datetime.now()
-    print('\nPREPROCESSING GRIDDED DATA')
+    print("\nPREPROCESSING GRIDDED DATA")
 
     # from config
-    path_data = cfg["path_preproc_data"]
     cellsize_xy = cfg["cellsize_xy"]
     cellsize_z = cfg["cellsize_z"]
     buffer_xy = cfg["buffer_xy"]
@@ -28,76 +26,70 @@ def snap_indicator_probs_to_grid(cfg):
 
     print(f"Snapping data to XY grid with cellsize {cellsize_xy}...", end=" ")
 
-    # read data
-    df = _read_and_write.read_table(path_data.with_suffix(".parquet"))
-
     # ONLY probability columns can be averaged when snapping to grid
     prob_cols = [col for col in df.columns if col.startswith("P(")]
 
     # snap XY to grid centers
-    df["X"] = np.floor(df["X"] / cellsize_xy) * cellsize_xy + cellsize_xy / 2
-    df["Y"] = np.floor(df["Y"] / cellsize_xy) * cellsize_xy + cellsize_xy / 2
+    df["x"] = np.floor(df["x"] / cellsize_xy) * cellsize_xy + cellsize_xy / 2
+    df["y"] = np.floor(df["y"] / cellsize_xy) * cellsize_xy + cellsize_xy / 2
 
     # init dataset with grid coordinates
-    ds = _utils.init_ds(df[["X", "Y", "Z"]], cellsize_xy, cellsize_z, epsg, buffer_xy, buffer_z)
+    ds = _utils.init_ds(df[["z", "y", "x"]], cellsize_xy, cellsize_z, epsg, buffer_xy, buffer_z)
 
     # mean indicator values per voxel
-    g = df.groupby(["X", "Y", "Z"], sort=False)[prob_cols].mean()
+    g = df.groupby(["z", "y", "x"], sort=False)[prob_cols].mean()
 
     # snap measurements to grid and add to dataset
     ds = _utils.add_df_to_ds(
         ds,
         g.reset_index(),
-        coord_map={"x": "X", "y": "Y", "z": "Z"},
         value_cols=prob_cols,
     )
 
     ##FLIGHTLINES TO DATASET, FOR USE IN ANYSOTROPY ANALYSIS
     # FIRST flightline per voxel
-    g = df.groupby(["X", "Y", "Z"], sort=False)[["LINE_NO"]].first()
+    g = df.groupby(["x", "y", "z"], sort=False)[["line_no"]].first()
 
     # snap flightline no to grid and add to dataset
-    ds = _utils.add_df_to_ds(
-        ds,
-        g.reset_index(),
-        coord_map={"x": "X", "y": "Y", "z": "Z"},
-        value_cols=["LINE_NO"],
+    ds = _utils.add_df_to_ds(ds,g.reset_index(),
+        value_cols=["line_no"],
     )
 
     ##FLIGHTLINES TO DATAFRAME, FOR USE IN CROSS-VALIDATION
     # flightlines per xy-cell
-    df_flightlines = df[["X", "Y", "LINE_NO"]].drop_duplicates()
+    df_flightlines = df[["x", "y", "line_no"]].drop_duplicates()
     df_flightlines = _utils.df_to_gdf(df_flightlines, crs=df.crs)
 
     df_flightlines.to_parquet(path_flightlines_out.with_suffix(".parquet"))
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
     return ds
 
 
-def mask_xy(ds, cfg):
+def mask_xy(data_g, cfg):
 
     # from config
     cellsize_xy = cfg["cellsize_xy"]
     buffer_xy = cfg["buffer_xy"]
-    indicators = cfg["indicators"]
+    indicator_names = cfg["indicator_names"]
 
     t0 = datetime.now()
+    print('\nPREPROCESSING PREDICTION GRID')
     print(f"Masking XY grid with {buffer_xy}m buffer to data...", end=" ")
 
-    # take one variable to determine where data is present
-    var = f"P({indicators[0]})"
+        # take one variable to determine where data is present
+    var = indicator_names[0]
 
     # check which XY cells have any data in Z direction
-    da = ds[var]
+    da = data_g[var]
     has_data_xy = da.notnull().any("z").values
 
     # calculate distance to nearest cell with data, and mask cells beyond buffer distance
     dist_m = distance_transform_edt(~has_data_xy, sampling=(cellsize_xy, cellsize_xy))
     mask_xy = dist_m <= buffer_xy
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
     return mask_xy
 
@@ -105,24 +97,23 @@ def mask_xy(ds, cfg):
 def mask_z(ds, cfg):
 
     # from config
-    buffer_z = cfg["buffer_z"]
-    indicators = cfg["indicators"]
+    indicator_names = cfg["indicator_names"]
 
     t0 = datetime.now()
-    print(f"Masking Z grid with {buffer_z}m buffer to data...", end=" ")
+    print(f"Masking Z grid ...", end=" ")
 
     # take one variable to determine where data is present
-    var = f"P({indicators[0]})"
+    var = indicator_names[0]
     da = ds[var]
 
     # "data present" = non-NaN
     has = da.notnull()
 
     # for each (y,x) cell, find top and bottom z with data
-    top_z = ds["z"].where(has).max("z").rename("top_z")  # (y,x)
-    bot_z = ds["z"].where(has).min("z").rename("bot_z")  # (y,x)
+    top_z = ds["z"].where(has).max("z").rename("top_z")  # (Y,X)
+    bot_z = ds["z"].where(has).min("z").rename("bot_z")  # (Y,X)
 
-    # stack -> 1D list of (y,x) cells, drop NaNs
+    # stack -> 1D list of (Y,X) cells, drop NaNs
     top_1d = top_z.stack(cell=("y", "x")).dropna("cell")
     bot_1d = bot_z.stack(cell=("y", "x")).dropna("cell")
 
@@ -139,15 +130,15 @@ def mask_z(ds, cfg):
     yg = ds["y"].values
 
     # interpolate top and bottom surfaces to grid using IDW
-    top_grid = _preprocessing_helper.idw_to_grid(xp_top, yp_top, vp_top, xg, yg, k=12, p=2.0)
-    bot_grid = _preprocessing_helper.idw_to_grid(xp_bot, yp_bot, vp_bot, xg, yg, k=12, p=2.0)
+    top_grid = _preproc_helper.idw_to_grid(xp_top, yp_top, vp_top, xg, yg, k=12, p=2.0)
+    bot_grid = _preproc_helper.idw_to_grid(xp_bot, yp_bot, vp_bot, xg, yg, k=12, p=2.0)
 
     # create DataArrays for top and bottom surfaces
     top_surf = xr.DataArray(top_grid, coords={"y": ds["y"], "x": ds["x"]}, dims=("y", "x"), name="top_surf")
     bot_surf = xr.DataArray(bot_grid, coords={"y": ds["y"], "x": ds["x"]}, dims=("y", "x"), name="bot_surf")
 
     # broadcasting top and bottom surfaces broadcasten to 3D for comparison with Z-coordinates
-    Z3, TOP3 = xr.broadcast(ds["z"], top_surf)  # -> (z,y,x)
+    Z3, TOP3 = xr.broadcast(ds["z"], top_surf)  # -> (Z,Y,X)
     _, BOT3 = xr.broadcast(ds["z"], bot_surf)
 
     # 3D z-coordinates
@@ -156,27 +147,23 @@ def mask_z(ds, cfg):
     # mask where Z3 in between top_surf and bot_surf (with buffer)
     mask_z = ((Z3 <= top_surf) & (Z3 >= bot_surf)).rename("mask_z")
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
     return mask_z
 
 
-def combine_masks(ds, mask_xy, mask_z, cfg):
+def combine_masks(data_g, mask_xy, mask_z):
 
     t0 = datetime.now()
     print("Combining XY and Z masks...", end=" ")
 
-    # from config
-    path_out = cfg["path_preproc_data_gridded"]
-
     mask = (mask_xy & mask_z).rename("mask")
-    ds["mask"] = mask.astype(bool)
 
-    _read_and_write.write_dataset(ds, path_out)
+    pred_g = xr.Dataset(data_vars={"mask": mask},coords=data_g.coords,attrs=data_g.attrs)
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
-    return ds
+    return pred_g
 
 
 def plotting(ds, cfg):
@@ -217,4 +204,4 @@ def plotting(ds, cfg):
             path = dir_plot / f"data gridded - {var} at z={depth}m.png"
             plt.savefig(path, dpi=300, bbox_inches="tight")
             plt.close()
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")

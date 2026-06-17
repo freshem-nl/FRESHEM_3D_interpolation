@@ -6,7 +6,7 @@ import matplotlib.ticker as mticker
 import numpy as np
 import seaborn as sns
 from matplotlib.collections import PatchCollection
-from matplotlib.colors import BoundaryNorm, ListedColormap, LogNorm
+from matplotlib.colors import BoundaryNorm, ListedColormap, LogNorm, Normalize
 from matplotlib.patches import Ellipse
 from sklearn.metrics import ConfusionMatrixDisplay
 
@@ -23,13 +23,16 @@ def plot_df(df, name, cfg):
     # from config
     dir_plot = cfg["dir_plot"]
 
+    # replace "rho" with "ρ" in column names for better plot labels
+    df.columns = [col.replace("rho", "ρ") for col in df.columns]
+
     os.makedirs(dir_plot, exist_ok=True)
     for var in df.columns:
         path = dir_plot / f"{name} - {var}.png"
 
         histogram(df[var], path, cfg)
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
 
 def plot_ds(ds, name, cfg):
@@ -39,44 +42,62 @@ def plot_ds(ds, name, cfg):
     # from config
     dir_plot = cfg["dir_plot"]
     plotting_depths = cfg["plotting_depths"]
+    indicator_names = cfg["indicator_names"]
+    quantile_names = cfg["quantile_names"]
+
+    # select target depths (exact match or nearest)
+    depths = ds["z"].sel(z=np.array(plotting_depths), method="nearest").values
 
     os.makedirs(dir_plot, exist_ok=True)
+
+    #replace rho with "ρ" for all data vars in ds
+    ds = ds.rename({var: var.replace("rho", "ρ") for var in ds.data_vars})
+
     for var in ds.data_vars:
 
         # histogram
-        series = ds[var].stack(cell=("z", "y", "x")).dropna("cell").to_series().rename(var)
+        da = ds[var]
+        series = da.stack(cell=da.dims).dropna("cell").to_series().rename(var)
         path = dir_plot / f"{name} - {var} histogram.png"
         histogram(series, path, cfg)
 
-        # select target depths (exact match or nearest)
-        target_depths = np.array(plotting_depths)
-        depths = ds["z"].sel(z=target_depths, method="nearest").values
+        # If the variable has a Z dimension: make one plot per target depth
+        if "z" in da.dims:
+            plot_items = [(depth, da.sel(z=depth)) for depth in depths]
+        # If the variable has no Z dimension: still make one 2D plot
+        else:
+            plot_items = [(None, da)]
 
-        for depth in depths:
-
-            # select 2D slice at target depth
-            da = ds[var].sel(z=depth)
+        for depth, da_plot in plot_items:
 
             # log colorscale for quantiles, linear for indicators
-            if var.startswith("Q"):
-                vals = da.values
+            if var in quantile_names:
+                vals = da_plot.values
                 vals = vals[np.isfinite(vals) & (vals > 0)]
                 vmin, vmax = np.quantile(vals, [0.02, 0.98])
                 norm = LogNorm(vmin=vmin, vmax=vmax)
+            elif var in indicator_names:
+                norm = Normalize(vmin=0, vmax=1)
             else:
                 norm = None
 
             # plot map
-            da.plot(norm=norm)
-            plt.title(f"{var} at z={depth}m")
+            da_plot.plot(norm=norm)
+
+            # set title and path based on whether depth is available
+            if depth is not None:
+                plt.title(f"{var} at z={depth}m")
+                path = dir_plot / "depth_slices" / f"{name} - {var} at z={depth}m.png"
+            else:
+                plt.title(var)
+                path = dir_plot / "depth_slices" / f"{name} - {var}.png"
 
             # save figure
-            path = dir_plot / "depth_slices" / f"{name} - {var} at z={depth}m.png"
             os.makedirs(path.parent, exist_ok=True)
             plt.savefig(path, dpi=300, bbox_inches="tight")
             plt.close()
 
-    print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
+    print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
 
 def boxplot(df, x=None, y=None, path=None, hue=None, showfliers=True):

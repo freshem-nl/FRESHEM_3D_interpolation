@@ -1,32 +1,47 @@
-name: test3
+name: anisotropy
+method: "geostat" # geostat, ml
 
 #paths
 dir_base: "c:/WERK/DATA/FRESHEM/Interpolation"
 dir_input: "Zeeland test data"
 
-#files
+# rho
 data_input: "LCI_Sharp_MOD_inv.xyz"
-
-# input data variables
-doi_name: "DOI_STANDARD"
-epsg: 28992
-
-# general variables
-variable_name: "RHO"
+variable_name: "rho"
 variable_unit: "Ohm.m"
 indicators: [1,2,3,5,10,20,30,50,100]
 indicator_bounds: [0.01, 150.0]
+doi_name: "doi_standard"
+
+# cl
+# data_input: "ZLN-clipped_nmc250_chloride.feather"
+# variable_name: "cl"
+# variable_unit: "mg/l"
+# indicators: [150,300,500,750,1000,1250,1500,2000,3000,5000,7500,10000,15000]
+# indicator_bounds: [0.01, 30000.0]
+
+# general variables
+epsg: 28992
 quantiles: [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95]
-cellsize_xy: 100
-cellsize_z: 1.0
+cellsize_xy: 50
+cellsize_z: 0.5
 buffer_xy: 300
 buffer_z: 3
-xval_n_lines: 3
+xval_n_lines: 10
+
+#geostat variables
+variogram_model_range_xy: 1000.0
+variogram_model_range_z: 2.01
+neighbourhood_dist_xy: 1000.0
+neighbourhood_dist_z: 0.99
+neighbourhood_n_sectors: 4
+neighbourhood_max_neigh_per_sector: 4
+    
 
 # ml variables
-OGC_angles: [7.5,22.5,37.5,52.5,67.5,82.5,97.5,112.5,127.5,142.5,157.5,172.5]
-rf_n_trees: 20
-features: ['Z', 'OGC_7.5', 'OGC_22.5', 'OGC_37.5', 'OGC_52.5', 'OGC_67.5', 'OGC_82.5', 'OGC_97.5', 'OGC_112.5', 'OGC_127.5', 'OGC_142.5', 'OGC_157.5', 'OGC_172.5']
+# OGC_angles: [7.5,22.5,37.5,52.5,67.5,82.5,97.5,112.5,127.5,142.5,157.5,172.5]
+rf_n_trees: 200
+features: ['z', 'OGC(7.5°)', 'OGC(22.5°)', 'OGC(37.5°)', 'OGC(52.5°)', 'OGC(67.5°)', 'OGC(82.5°)', 'OGC(97.5°)', 'OGC(112.5°)', 'OGC(127.5°)', 'OGC(142.5°)', 'OGC(157.5°)', 'OGC(172.5°)']
 
 # plotting
 # plotting_depths: [-150, -50, -10, -5, 0.0]
@@ -38,6 +53,6 @@ histogram_sample_size: 25000
 aniso_indicator: 5
 aniso_indicator_z_range: 3.0
 aniso_long_axis_min: 500.0
-aniso_long_axis_max: 3000.0
+aniso_long_axis_max: 10000.0
 aniso_short_axis_max: 1000.0
 aniso_long_short_angle_min_diff: 30.0

@@ -9,19 +9,19 @@ def df_to_gdf(df, epsg=None, crs=None):
     if epsg is not None:
         crs = f"EPSG:{epsg}"
     # Convert to geodataframe
-    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df["X"], df["Y"]), crs=crs)
+    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df["x"], df["y"]), crs=crs)
     return gdf
 
 
 def init_ds(df, cellsize_xy=None, cellsize_z=None, epsg=None, buffer_xy=0, buffer_z=0):
 
-    x = np.arange(df["X"].min() - buffer_xy, df["X"].max() + buffer_xy + cellsize_xy, cellsize_xy)
+    x = np.arange(df["x"].min() - buffer_xy, df["x"].max() + buffer_xy + cellsize_xy, cellsize_xy)
 
-    y = np.arange(df["Y"].min() - buffer_xy, df["Y"].max() + buffer_xy + cellsize_xy, cellsize_xy)
+    y = np.arange(df["y"].min() - buffer_xy, df["y"].max() + buffer_xy + cellsize_xy, cellsize_xy)
 
-    z = np.arange(df["Z"].min() - buffer_z, df["Z"].max() + buffer_z + cellsize_z, cellsize_z)
+    z = np.arange(df["z"].min() - buffer_z, df["z"].max() + buffer_z + cellsize_z, cellsize_z)
 
-    ds = xr.Dataset(coords={"x": x, "y": y, "z": z})
+    ds = xr.Dataset(coords={"z": z, "y": y, "x": x})
 
 
     ds.attrs.update({
@@ -32,19 +32,21 @@ def init_ds(df, cellsize_xy=None, cellsize_z=None, epsg=None, buffer_xy=0, buffe
     })
 
 
-    ds["x"].attrs.update({"standard_name": "projection_x_coordinate", "units": "m"})
-    ds["y"].attrs.update({"standard_name": "projection_y_coordinate", "units": "m"})
-    ds["z"].attrs.update({"standard_name": "depth", "positive": "up", "units": "m"})
+    ds["x"].attrs.update({"standard_name": "X-coordinate", "units": "m"})
+    ds["y"].attrs.update({"standard_name": "Y-coordinate", "units": "m"})
+    ds["z"].attrs.update({"standard_name": "Z-coordinate", "positive": "up", "units": "m"})
 
 
     if epsg is not None:
         ds.attrs["crs"] = f"EPSG:{int(epsg)}"
         ds = ds.rio.write_crs(f"EPSG:{epsg}")
+        ds = ds.rio.set_spatial_dims(x_dim="x", y_dim="y")
+
 
     return ds
 
 
-def add_df_to_ds(ds, df, coord_map=None, value_cols=None, dtype="float32"):
+def add_df_to_ds(ds, df, value_cols=None, dtype="float32"):
     """
     Add one or more value columns from a DataFrame to an xarray Dataset.
 
@@ -54,8 +56,6 @@ def add_df_to_ds(ds, df, coord_map=None, value_cols=None, dtype="float32"):
         Must have coordinates ds.x, ds.y, ds.z (cell centers).
     df : pandas.DataFrame
         Must contain coordinate columns (e.g. X,Y,Z) and one or more value columns.
-    coord_map : dict
-        Mapping from ds coord name -> df column name, default {"x":"X","y":"Y","z":"Z"}.
     value_cols : list or None
         Which df columns to write. If None: all columns except coord columns.
     dtype : str
@@ -65,11 +65,8 @@ def add_df_to_ds(ds, df, coord_map=None, value_cols=None, dtype="float32"):
     -------
     ds : xarray.Dataset (modified)
     """
-    if coord_map is None:
-        coord_map = {"x": "X", "y": "Y", "z": "Z"}
-
     # Identify coordinate columns in df
-    df_coord_cols = [coord_map["x"], coord_map["y"], coord_map["z"]]
+    df_coord_cols = ["x", "y", "z"]
 
     # Auto-detect value columns if not provided
     if value_cols is None:
@@ -81,9 +78,9 @@ def add_df_to_ds(ds, df, coord_map=None, value_cols=None, dtype="float32"):
     z = ds.z.values
 
     # Map centers -> indices (assumes df coords match ds coords)
-    ix = np.searchsorted(x, df[coord_map["x"]].to_numpy())
-    iy = np.searchsorted(y, df[coord_map["y"]].to_numpy())
-    iz = np.searchsorted(z, df[coord_map["z"]].to_numpy())
+    ix = np.searchsorted(x, df['x'].to_numpy())
+    iy = np.searchsorted(y, df['y'].to_numpy())
+    iz = np.searchsorted(z, df['z'].to_numpy())
 
     # value
     dfv = df.loc[:, value_cols]
