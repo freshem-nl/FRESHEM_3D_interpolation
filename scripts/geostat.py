@@ -25,7 +25,7 @@ def kriging(data, pred, cfg, verbose=True):
     neigh_max_neigh_per_sector = cfg["neighbourhood_max_neigh_per_sector"]
 
     # Create Isatis input database
-    input_db = isa.DbPandas(data.to_dataframe().dropna().reset_index())
+    input_db = isa.DbPandas(data.to_dataframe().dropna(subset=indicator_names).reset_index())
 
     # Use one fixed dimension order for everything sent to Isatis
     pred_xyz = pred.transpose("x", "y", "z")
