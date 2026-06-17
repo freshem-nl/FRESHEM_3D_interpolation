@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from scripts import write
+from scripts import _utils, write
 
 
 def table(path):
@@ -25,7 +25,6 @@ def dataset(path):
     path = path.with_suffix(".nc")
     ds = xr.open_dataset(path)
     return ds
-
 
 def skytem_xyz(cfg):
     """Parse the SkyTEM inversion export, handling AGS (/ LINE_NO) and #HEADERS styles."""
@@ -113,10 +112,8 @@ def skytem_xyz(cfg):
         if "X" not in df.columns or "Y" not in df.columns:
             raise ValueError("Input file must contain X/Y or UTMX/UTMY coordinates.")
 
-        ###TEMP
-        cond = (df["X"] > 47500) & (df["X"] < 51000) & (df["Y"] > 390000) & (df["Y"] < 397000)
-        df = df.loc[cond]
-        ### END TEMP
+        # all columns to lowercase for consistency
+        df.columns = [x.lower() for x in df.columns]
 
         path_output.parent.mkdir(parents=True, exist_ok=True)
         write.table(df, path_output)
@@ -127,3 +124,16 @@ def skytem_xyz(cfg):
         print(txt)
 
     return df
+
+def deltares_cl(cfg):
+
+    # from config
+    path_in = cfg["path_input"]
+    epsg = cfg["epsg"]
+
+    data = pd.read_feather(path_in)
+    data = data.dropna()
+
+    data = _utils.df_to_gdf(data, epsg=epsg)
+
+    return data

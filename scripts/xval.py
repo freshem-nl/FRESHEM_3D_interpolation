@@ -5,7 +5,7 @@ import pandas as pd
 import xarray as xr
 from sklearn.metrics import classification_report, confusion_matrix
 
-from scripts import _postproc_helper, _scoring, visualisation, read, write
+from scripts import _postproc_helper, _scoring, read, visualisation, write
 
 
 def xval_lines(cfg):
@@ -23,10 +23,10 @@ def xval_lines(cfg):
     xy_lines = read.table(path_flightlines)
 
     # Count number of points per line
-    counts = xy_lines.groupby("LINE_NO").size().sort_values(ascending=False)
+    counts = xy_lines.groupby("line_no").size().sort_values(ascending=False)
 
     # select top_lines from the longest lines, at least 50% of the lines
-    n_lines_total = xy_lines["LINE_NO"].nunique()
+    n_lines_total = xy_lines["line_no"].nunique()
     fraction_to_select = n_lines / n_lines_total
     fraction_to_select_from = max(0.5, fraction_to_select)  # at least top 50% lines
     n_top = int(np.ceil(len(counts) * fraction_to_select_from))
@@ -38,7 +38,7 @@ def xval_lines(cfg):
     selected_lines = rng.choice(top_lines, size=n_pick, replace=False).tolist()
 
     # filter xy_lines to selected lines
-    xy_lines_selected = xy_lines[xy_lines["LINE_NO"].isin(selected_lines)].copy()
+    xy_lines_selected = xy_lines[xy_lines["line_no"].isin(selected_lines)].copy()
 
     print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
 
@@ -49,23 +49,23 @@ def mask_line(df, mask_overall, line_no):
 
     # get relevant XY for the line
     df = df.copy()
-    df = df.loc[df["LINE_NO"] == line_no, ["X", "Y"]].drop_duplicates()
+    df = df.loc[df["line_no"] == line_no, ["x", "y"]].drop_duplicates()
 
     # 2) coord -> index (exact match)
-    x_index = pd.Index(mask_overall["X"].values)
-    y_index = pd.Index(mask_overall["Y"].values)
+    x_index = pd.Index(mask_overall["x"].values)
+    y_index = pd.Index(mask_overall["y"].values)
 
-    ix = x_index.get_indexer(df["X"].to_numpy())
-    iy = y_index.get_indexer(df["Y"].to_numpy())
+    ix = x_index.get_indexer(df["x"].to_numpy())
+    iy = y_index.get_indexer(df["y"].to_numpy())
 
     # 3) 2D mask met *paired* indexing
-    mask_xy_np = np.zeros((mask_overall.sizes["Y"], mask_overall.sizes["X"]), dtype=bool)
+    mask_xy_np = np.zeros((mask_overall.sizes["y"], mask_overall.sizes["x"]), dtype=bool)
     mask_xy_np[iy, ix] = True
 
     mask_xy = xr.DataArray(
         mask_xy_np,
-        coords={"Y": mask_overall["Y"], "X": mask_overall["X"]},
-        dims=("Y", "X"),
+        coords={"y": mask_overall["y"], "x": mask_overall["x"]},
+        dims=("y", "x"),
         name="mask_xy_line",
     )
 
@@ -84,11 +84,10 @@ def validation(cfg):
     path_data_gridded = cfg["path_preproc_data_gridded"]
     path_xval_pred = cfg["path_prediction_xval"]
     inds = np.array(cfg["indicators"])
+    ind_cols = cfg["indicator_names"]
     ind_bounds = cfg["indicator_bounds"]
     dir_data = cfg["dir_data"]
     dir_xval = cfg["dir_xval"]
-
-    ind_cols = [f"P({b:g})" for b in inds]
 
     # read datasets
     ds_true = read.dataset(path_data_gridded)
@@ -102,14 +101,10 @@ def validation(cfg):
     df_true = df_true[df_true.index.isin(df_pred.index)]
 
     # calculate median quantiles and convert to class labels
-    df_true["median"] = _postproc_helper.ind_probs_to_quantiles(
-        df_true[ind_cols], inds, (0.5,), ind_bounds[0], ind_bounds[1]
-    )
+    df_true["median"] = _postproc_helper.ind_probs_to_quantiles(df_true[ind_cols], inds, ind_bounds, (0.5,))
     df_true["median class"] = _postproc_helper.class_from_quantile(df_true["median"], inds, ind_bounds)
 
-    df_pred["median"] = _postproc_helper.ind_probs_to_quantiles(
-        df_pred[ind_cols], inds, (0.5,), ind_bounds[0], ind_bounds[1]
-    )
+    df_pred["median"] = _postproc_helper.ind_probs_to_quantiles(df_pred[ind_cols], inds, ind_bounds, (0.5,))
     df_pred["median class"] = _postproc_helper.class_from_quantile(df_pred["median"], inds, ind_bounds)
 
     # calculate RPS (ranked probability score) for each cell, and put in dataframe

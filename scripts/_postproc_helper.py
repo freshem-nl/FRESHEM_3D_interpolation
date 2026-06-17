@@ -5,22 +5,19 @@ import pandas as pd
 def ind_probs_to_quantiles(
     df: pd.DataFrame,
     indicators,
+    indicator_bounds=(0.0, 150.0),
     q_levels=(0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95),
-    lower=0.0,
-    upper=150.0,
-    dtype=np.float32,
-    prefix="Q",
+    q_names=None,
+    dtype=np.float32
 ):
 
     indicators = np.asarray(indicators, dtype=np.float32)
     q_levels = np.asarray(q_levels, dtype=np.float32)
 
     # Extend thresholds with hard bounds: t_ext = [lower, t1..tm, upper]
+    lower, upper = map(float, indicator_bounds)
     t_ext = np.concatenate([[lower], indicators, [upper]]).astype(np.float32)
     m_ext = t_ext.size
-
-    # output column names: e.g. Q05, Q10, Q25, Q50, Q75, Q90, Q95
-    out_cols = [f"{prefix}{int(round(q*100)):02d}" for q in q_levels]
 
     # Read CDF values: shape (n, m)
     F = df.to_numpy(dtype=np.float64, copy=False)
@@ -57,12 +54,19 @@ def ind_probs_to_quantiles(
 
         # Linear interpolation weight; handle flat segments safely
         denom = F_hi - F_lo
-        w = np.where(denom > 0, (p - F_lo) / denom, 0.0)
+        # w = np.where(denom > 0, (p - F_lo) / denom, 0.0)       
+        w = np.zeros_like(denom, dtype=np.float64)
+        mask = denom > 0
+        w[mask] = (p - F_lo[mask]) / denom[mask]
+
 
         # linear interpolation between t_lo and t_hi
         Q[:, j] = t_lo + w * (t_hi - t_lo)
 
-    df_quant = pd.DataFrame(Q.astype(dtype, copy=False), index=df.index, columns=out_cols)
+    if q_names is None:
+        q_names = [f"q{int(p*100):02d}" for p in q_levels]
+
+    df_quant = pd.DataFrame(Q.astype(dtype, copy=False), index=df.index, columns=q_names)
 
     return df_quant
 

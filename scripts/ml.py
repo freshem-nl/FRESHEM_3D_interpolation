@@ -12,10 +12,10 @@ def rf_train(df, cfg, verbose=True):
 
     # from config
     features = cfg["features"]
-    indicators = cfg["indicators"]
+    indicator_names = cfg["indicator_names"]
     n_trees = cfg["rf_n_trees"]
 
-    output_names = [f"P({x})" for x in indicators]
+    # output_names = [f"P({x})" for x in indicators]
 
     df = df.sample(frac=0.05, random_state=42)
 
@@ -25,7 +25,7 @@ def rf_train(df, cfg, verbose=True):
         n_estimators=n_trees, n_jobs=-1, max_depth=20, min_samples_leaf=2, max_features="sqrt", random_state=42
     )
     X = df[features]
-    y = df[output_names]
+    y = df[indicator_names]
     if verbose:
         print("\nSPATIAL INTERPOLATION")
         print(f"Training random forest on {len(X)} samples...", end=" ")
@@ -38,7 +38,7 @@ def rf_train(df, cfg, verbose=True):
     if verbose:
         print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
 
-    return model, output_names
+    return model
 
 
 def rf_predict(model, output_names, pred, cfg, xval=False, verbose=True):
@@ -47,6 +47,7 @@ def rf_predict(model, output_names, pred, cfg, xval=False, verbose=True):
 
     # from config
     features = cfg["features"]
+    indicator_names = cfg["indicator_names"]
     
     feature_arrays = []
     for var in features:
@@ -127,14 +128,14 @@ def rf_predict(model, output_names, pred, cfg, xval=False, verbose=True):
 
 
     # Make a (cell, output) array filled with NaN
-    full = np.full((mask_1d.size, len(output_names)), np.nan, dtype=np.float32)
+    full = np.full((mask_1d.size, len(indicator_names)), np.nan, dtype=np.float32)
     full[mask_1d.values, :] = y_pred.astype(np.float32, copy=False)
 
 
     # Reshape back to grid: (Z, Y, X, output) -> (output, Z, Y, X)
     pred_grid = xr.DataArray(
-        full.reshape(pred.sizes["Z"], pred.sizes["Y"], pred.sizes["X"], len(output_names)),
-        coords={"Z": pred["Z"], "Y": pred["Y"], "X": pred["X"], "output": output_names},
+        full.reshape(pred.sizes["Z"], pred.sizes["Y"], pred.sizes["X"], len(indicator_names)),
+        coords={"Z": pred["Z"], "Y": pred["Y"], "X": pred["X"], "output": indicator_names},
         dims=("Z", "Y", "X", "output"),
     ).transpose("output", "Z", "Y", "X")
 
@@ -149,7 +150,7 @@ def rf_predict(model, output_names, pred, cfg, xval=False, verbose=True):
     # pred_grid = pred_cell.unstack("cell").transpose("output", "Z", "Y", "X")  # (z,y,x,output)  # (output,z,y,x)
 
     # Add predicted outputs to dataset, replacing values where prediction is not NaN
-    for name in output_names:
+    for name in indicator_names:
         new = pred_grid.sel(output=name).drop_vars("output")
 
         if name not in pred:

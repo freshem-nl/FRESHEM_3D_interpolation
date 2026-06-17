@@ -28,13 +28,13 @@ def kriging(data, pred, cfg, verbose=True):
     input_db = isa.DbPandas(data.to_dataframe().dropna().reset_index())
 
     # Use one fixed dimension order for everything sent to Isatis
-    pred_xyz = pred.transpose("X", "Y", "Z")
+    pred_xyz = pred.transpose("x", "y", "z")
 
     # Create Isatis output grid
     grid = isa.GridGeom(
-        origin=[pred_xyz["X"].values.min(), pred_xyz["Y"].values.min(), pred_xyz["Z"].values.min()],
+        origin=[pred_xyz["x"].values.min(), pred_xyz["y"].values.min(), pred_xyz["z"].values.min()],
         cell_size=[pred_xyz.attrs["cellsize_x"], pred_xyz.attrs["cellsize_y"], pred_xyz.attrs["cellsize_z"]],
-        nxyz=[pred_xyz.sizes["X"], pred_xyz.sizes["Y"], pred_xyz.sizes["Z"]],
+        nxyz=[pred_xyz.sizes["x"], pred_xyz.sizes["y"], pred_xyz.sizes["z"]],
         ndim=3,
     )
 
@@ -75,7 +75,7 @@ def kriging(data, pred, cfg, verbose=True):
 
     # Run kriging
     runner = isa.Kriging()
-    runner.set_input_data(input_db, coords=["X", "Y", "Z"], invars=indicator_names)
+    runner.set_input_data(input_db, coords=["x", "y", "z"], invars=indicator_names)
     runner.set_output_data(output_db, sel="mask")
     output_db = runner.kriging(model=multi_vario, neigh=neigh)
 
@@ -105,106 +105,10 @@ def kriging(data, pred, cfg, verbose=True):
             pred[var] = new_da.where(pred["mask"])
 
     if verbose:
-        print(f"done {datetime.now() - t0}")
+        
+        dt = datetime.now() - t0
+        m, s = divmod(round(dt.total_seconds()), 60)
+        print(f"({m}m{s:02d}s)")
+
 
     return pred
-
-
-# import numpy as np
-# import os
-
-# import isatis as isa
-# import isatis.constants as cst
-# import pandas as pd
-# from scripts import config_loader, visualisation, _utils
-# from pathlib import Path
-
-# isa.setLicenseString('52100@lic-isatis.tno.nl')
-
-# def kriging(data, pred, cfg):
-
-#     # from config
-#     # indicators = cfg["indicators"]
-#     indicator_names = cfg["indicator_names"]
-#     range_xy = cfg["variogram_model_range_xy"]
-#     range_z = cfg["variogram_model_range_z"]
-#     neigh_dist_xy = cfg['neighbourhood_dist_xy']
-#     neigh_dist_z = cfg['neighbourhood_dist_z']
-#     neigh_n_sectors = cfg['neighbourhood_n_sectors']
-#     neigh_max_neigh_per_sector = cfg['neighbourhood_max_neigh_per_sector']
-
-#     # Create isatis input databases from the input DataFrames:
-#     input_db  = isa.DbPandas(data.to_dataframe().reset_index())
-
-#     # Use one fixed dimension order for everything sent to Isatis
-#     pred_xyz = pred.transpose("X", "Y", "Z")
-
-#     # Create Isatis output database from full regular grid dataset
-#     grid = isa.GridGeom(
-#         origin=[pred_xyz["X"].values.min(), pred_xyz["Y"].values.min(), pred_xyz["Z"].values.min()],
-#         cell_size=[pred_xyz.attrs["cellsize_x"], pred_xyz.attrs["cellsize_y"], pred_xyz.attrs["cellsize_z"]],
-#         nxyz=[pred_xyz.sizes["X"], pred_xyz.sizes["Y"], pred_xyz.sizes["Z"]],
-#         ndim=len(pred_xyz.sizes),
-#     )
-
-#     # dataframe of all pred variables, properly ordered
-#     df_out = (
-#         pred_xyz.to_dataframe()
-#         .reset_index()
-#         .drop(columns=["X", "Y", "Z"])
-#     )
-
-
-#     output_db = isa.DbPandas(df_out, grid=grid)
-
-#     # Make multivariate variogram model
-#     n_var = len(indicator_names)
-
-#     # create the sill martrix
-#     multi_vario = isa.VModel(nvar=n_var)
-#     sill_matrix = np.zeros((n_var, n_var))
-#     nugg_matrix = np.zeros((n_var, n_var))
-#     for i in range(n_var):
-#         sill_matrix[i, i] = 0.33
-#         nugg_matrix[i, i] = 0.001
-
-#     # add the structure of the multivariate model
-#     sph_struct = isa.VStruc(stype=cst.MOD.SPH,
-#                             nvar=n_var,
-#                             ranges=[range_xy, range_xy, range_z],
-#                             sill=sill_matrix)
-#     multi_vario.add_struct(sph_struct)
-#     multi_vario.set_nugget(nugg_matrix)
-
-#     # define neighbourhood
-#     neigh = isa.Neigh(n_sectors=neigh_n_sectors, max_neigh_per_sector=neigh_max_neigh_per_sector, ellipsoid_size=[neigh_dist_xy, neigh_dist_xy, neigh_dist_z])
-
-#     # Initialize a calculator to do the Kriging:
-#     runner = isa.Kriging()
-
-#     # Tell the calculator what the input data is.
-#     runner.set_input_data(input_db, coords = ["X", "Y", "Z"], invars = indicator_names)
-
-#     # Tell the calculator what the output data is.
-#     runner.set_output_data(output_db, sel='mask')
-
-#     # Run the Kriging
-#     output_db = runner.kriging(model = multi_vario, neigh=neigh)
-
-#     # isatis database to dataframe
-#     output_df = output_db.df().copy()
-#     output_df.columns = output_df.columns.str.removesuffix('_' + runner.kriging_suffix)
-#     output_df = output_df[indicator_names]
-
-#     # Write results back to dataset
-#     pred_out = pred.copy()
-#     grid_shape = (pred.sizes["X"], pred.sizes["Y"], pred.sizes["Z"])
-#     dims = ("X", "Y", "Z")
-
-#     values = output_df.to_numpy(dtype=np.float32)
-
-#     for i, var in enumerate(indicator_names):
-#         arr = values[:, i].reshape(grid_shape)
-#         pred_out[var] = (dims, arr)
-
-#     return pred_out

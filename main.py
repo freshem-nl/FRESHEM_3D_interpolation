@@ -20,7 +20,17 @@ from scripts import (
 )
 
 # TODO:
-# -in geostat.kriging: memory efficienter maken door geen kopieen van volledige dataset te maken
+# - model definitie toevoegen tov maaiveld (layer, top, bottom) voor opgeschaalde berekening res -> Cl
+# - anisotropie berekenen en toepassen in geostatistische interpolatie
+# - anisotropie op data in mutlithreading
+# - visualisatie als arcgis vector field (simpel, ipv stretched. Heeft nodig: richting, magnitude)
+# - beter bovenkant model:
+#       - Freshem Zeeland: residu bepalen tussen model zomergrondwaterstand en bovenste HEM meting, interpolatie van residu geeft bovenkant model
+#       - nu wellicht grondwatermodel gebruiken: https://www.pdok.nl/introductie/-/article/bro-model-grondwaterspiegeldiepte-wdm-
+#       - of onafhankelijke (anisotrope) interpolatie van bovenste HEM metingen
+# - al gedaan (?): in geostat.kriging: memory efficienter maken door geen kopieen van volledige dataset te maken
+# - percentiles_to_indicators: comments toevoegen
+# - resample_layers_to_z: comments toevoegen
 
 
 def main(cfg):
@@ -33,19 +43,37 @@ def main(cfg):
     method = cfg["method"]
 
     def preprocessing_data():
-        data = read.skytem_xyz(cfg)
-        data = preproc_data.drop_below_doi_and_resample_layers_to_z(data, cfg)
-        data = preproc_data.quantiles_and_indicator_probs(data, cfg)
+        if cfg["variable_name"].lower() == "rho":
+            data = read.skytem_xyz(cfg)
+            data = preproc_data.drop_below_doi_and_resample_layers_to_z(data, cfg)
+            data = preproc_data.quantiles_and_indicator_probs(data, cfg)
+        elif cfg["variable_name"].lower() == "cl":
+            data = read.deltares_cl(cfg)
+            data = preproc_data.percentiles_to_indicators(data, cfg)
+            data = preproc_data.resample_layers_to_z(data, cfg)
         if method == "ml":
             data = preproc_ml.OGC(data, cfg)
+        ###TEMP
+        cond = (data["x"] > 39700) & (data["x"] < 43900) & (data["y"] > 391400) & (data["y"] < 397600)
+        data = data.loc[cond]
+        ### END TEMP
         write.table(data, cfg["path_preproc_data"])
         visualisation.plot_df(data, "preproc - data", cfg)
 
     def preprocessing_data_gridded():
         data = read.table(cfg["path_preproc_data"])
         data_g = preproc_grid.snap_data_to_grid(data, cfg)
+        if method == "geostat":
+            data_g = anisotropy.from_data(data_g, cfg)
+            # write.ds_to_tiff(data_g, cfg["dir_rasters"], "anisotropy")  # for visualisation
+            a=1
         write.dataset(data_g, cfg["path_preproc_data_gridded"])
         visualisation.plot_ds(data_g, "preproc - gridded data", cfg)
+
+    data_g = read.dataset(cfg["path_preproc_data_gridded"])
+    write.ds_to_tiff(data_g[['short_dist', 'long_angle']], cfg["dir_rasters"], "anisotropy")  # for visualisation
+    a=1
+
 
     def preprocessing_prediction_grid():
         data_g = read.dataset(cfg["path_preproc_data_gridded"])
@@ -55,7 +83,11 @@ def main(cfg):
         if method == "ml":
             pred = preproc_ml.OGC(pred, cfg)
         if method == "geostat":
-            pass  # add aniso to pred_g
+            # schrijf dit weg in aparte dataset data_aniso
+            # pred = anisotropy.from_data(data_g, pred, cfg)  # add aniso to pred
+            # maak plots van data_aniso
+            # interpoleer data_aniso parameters naar relevante ellips parameters (hoek, lengte korte-as) in pred
+            pass
         write.dataset(pred, cfg["path_preproc_prediction_grid"])
         visualisation.plot_ds(pred, "preproc - prediction grid", cfg)
 
@@ -64,9 +96,7 @@ def main(cfg):
         if method == "ml":
             data = read.table(cfg["path_preproc_data"])
             model, output_names = ml.rf_train(data, cfg)
-            pred = ml.rf_predict(
-                model, output_names, pred, cfg
-            )  # hier ALTIJD ds_pred meegeven, in deze functie NIET wegschrijven naar schijf
+            pred = ml.rf_predict(model, output_names, pred, cfg)
         elif method == "geostat":
             data_g = read.dataset(cfg["path_preproc_data_gridded"])
             pred = geostat.kriging(data_g, pred, cfg)
@@ -80,7 +110,7 @@ def main(cfg):
         visualisation.plot_ds(ds, "postproc", cfg)
         write.ds_to_tiff(ds, cfg["dir_rasters"], "postproc")
 
-    def xval_machine_learning():
+    def interpolation_xval():
         pred = read.dataset(cfg["path_preproc_prediction_grid"])
         data = read.table(cfg["path_preproc_data"])
         data_g = read.dataset(cfg["path_preproc_data_gridded"])
@@ -88,38 +118,33 @@ def main(cfg):
         lines = xval.xval_lines(cfg)
         model_mask = pred["mask"].copy()  # overall mask for reuse
         txt = "crossvalidation: train without data of line, predict on line"
-        for line in tqdm(lines["LINE_NO"].unique(), desc=txt, unit="line", leave=True):
-            # only include voxels present on line and orioginal mask in fold mask
-            pred["mask"] = xval.mask_line(lines, model_mask, line)  # include line only
+        for line in tqdm(lines["line_no"].unique(), desc=txt, unit="line", leave=True):
+            pred["mask"] = xval.mask_line(lines, model_mask, line)  # only voxels in model_mask and line
             if method == "ml":
-                data_fold = data[data["LINE_NO"] != line].copy()  # exclude data from line
-                model, output_names = ml.rf_train(data_fold, cfg, verbose=False)
-                pred = ml.rf_predict(model, output_names, pred, cfg, verbose=False)
+                data_fold = data[data["line_no"] != line].copy()  # exclude data from line
+                model = ml.rf_train(data_fold, cfg, verbose=False)
+                pred = ml.rf_predict(model, pred, cfg, verbose=False)
             elif method == "geostat":
-                data_g_fold = data_g.copy().where(~pred["mask"]) # exclude voxels of line
+                data_g_fold = data_g.copy().where(~pred["mask"])  # exclude voxels of line
                 pred = geostat.kriging(data_g_fold, pred, cfg, verbose=False)
         pred = postproc.ensure_monotonicity(pred, cfg)
         write.dataset(pred, cfg["path_prediction_xval"])
         write.ds_to_tiff(pred, cfg["dir_rasters"], "xval")
         visualisation.plot_ds(pred, "xval", cfg)
 
-    def geostat_anisotropy():
-        anisotropy.main(cfg)
-
     def xval_scoring():
         xval.validation(cfg)
 
-    preprocessing_data()
-    preprocessing_data_gridded()
-    preprocessing_prediction_grid()
-    interpolation()
-    postprocessing()
-    xval_machine_learning()
-    xval_scoring()
-    # geostat_anisotropy()
+    # preprocessing_data()
+    # preprocessing_data_gridded()
+    # preprocessing_prediction_grid()
+    # interpolation()
+    # postprocessing()
+    # interpolation_xval()
+    # xval_scoring()
 
     # total runtime
-    print(f"\nTotal runtime: {(datetime.now() - t)}.")
+    print(f"\nTotal runtime: {(datetime.now() - t)}.\n\n")
 
 
 if __name__ == "__main__":

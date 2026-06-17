@@ -37,25 +37,24 @@ def ds_to_tiff(ds, dir_output, name):
 
 
         # Only export 3D variables with Z, Y, X dimensions
-        if set(da.dims) != {"Z", "Y", "X"}:
+        if set(da.dims) != {"z", "y", "x"}:
             continue
 
-        da = da.transpose("Z", "Y", "X")
+        da = da.transpose("z", "y", "x")
 
-        da = da.rio.set_spatial_dims(x_dim="X", y_dim="Y")
+        # da = da.rio.set_spatial_dims(x_dim="X", y_dim="Y")
 
         # da.rio.to_raster(path.with_suffix(f"_{var}.tif"))
         da = da.astype("float32")
         da = da.fillna(-9999)
         da = da.rio.write_nodata(-9999)
 
-        z_vals = ds.Z.values
+        z_vals = ds.z.values
 
         da.attrs["long_name"] = [f"z={z:.1f} m" for z in z_vals]
 
-
         # Explicitly define spatial dimensions for this DataArray
-        da = da.rio.set_spatial_dims(x_dim="X", y_dim="Y")
+        # da = da.rio.set_spatial_dims(x_dim="X", y_dim="Y")
 
 
         path = dir_output / f"{name} - {var}.tif"

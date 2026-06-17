@@ -30,14 +30,14 @@ def snap_data_to_grid(df, cfg):
     prob_cols = [col for col in df.columns if col.startswith("P(")]
 
     # snap XY to grid centers
-    df["X"] = np.floor(df["X"] / cellsize_xy) * cellsize_xy + cellsize_xy / 2
-    df["Y"] = np.floor(df["Y"] / cellsize_xy) * cellsize_xy + cellsize_xy / 2
+    df["x"] = np.floor(df["x"] / cellsize_xy) * cellsize_xy + cellsize_xy / 2
+    df["y"] = np.floor(df["y"] / cellsize_xy) * cellsize_xy + cellsize_xy / 2
 
     # init dataset with grid coordinates
-    ds = _utils.init_ds(df[["Z", "Y", "X"]], cellsize_xy, cellsize_z, epsg, buffer_xy, buffer_z)
+    ds = _utils.init_ds(df[["z", "y", "x"]], cellsize_xy, cellsize_z, epsg, buffer_xy, buffer_z)
 
     # mean indicator values per voxel
-    g = df.groupby(["Z", "Y", "X"], sort=False)[prob_cols].mean()
+    g = df.groupby(["z", "y", "x"], sort=False)[prob_cols].mean()
 
     # snap measurements to grid and add to dataset
     ds = _utils.add_df_to_ds(
@@ -48,16 +48,16 @@ def snap_data_to_grid(df, cfg):
 
     ##FLIGHTLINES TO DATASET, FOR USE IN ANYSOTROPY ANALYSIS
     # FIRST flightline per voxel
-    g = df.groupby(["X", "Y", "Z"], sort=False)[["LINE_NO"]].first()
+    g = df.groupby(["x", "y", "z"], sort=False)[["line_no"]].first()
 
     # snap flightline no to grid and add to dataset
     ds = _utils.add_df_to_ds(ds,g.reset_index(),
-        value_cols=["LINE_NO"],
+        value_cols=["line_no"],
     )
 
     ##FLIGHTLINES TO DATAFRAME, FOR USE IN CROSS-VALIDATION
     # flightlines per xy-cell
-    df_flightlines = df[["X", "Y", "LINE_NO"]].drop_duplicates()
+    df_flightlines = df[["x", "y", "line_no"]].drop_duplicates()
     df_flightlines = _utils.df_to_gdf(df_flightlines, crs=df.crs)
 
     df_flightlines.to_parquet(path_flightlines_out.with_suffix(".parquet"))
@@ -72,17 +72,18 @@ def mask_xy(data_g, cfg):
     # from config
     cellsize_xy = cfg["cellsize_xy"]
     buffer_xy = cfg["buffer_xy"]
-    indicators = cfg["indicators"]
+    indicator_names = cfg["indicator_names"]
 
     t0 = datetime.now()
+    print('\nPREPROCESSING PREDICTION GRID')
     print(f"Masking XY grid with {buffer_xy}m buffer to data...", end=" ")
 
         # take one variable to determine where data is present
-    var = f"P({indicators[0]})"
+    var = indicator_names[0]
 
     # check which XY cells have any data in Z direction
     da = data_g[var]
-    has_data_xy = da.notnull().any("Z").values
+    has_data_xy = da.notnull().any("z").values
 
     # calculate distance to nearest cell with data, and mask cells beyond buffer distance
     dist_m = distance_transform_edt(~has_data_xy, sampling=(cellsize_xy, cellsize_xy))
@@ -96,53 +97,52 @@ def mask_xy(data_g, cfg):
 def mask_z(ds, cfg):
 
     # from config
-    buffer_z = cfg["buffer_z"]
-    indicators = cfg["indicators"]
+    indicator_names = cfg["indicator_names"]
 
     t0 = datetime.now()
-    print(f"Masking Z grid with {buffer_z}m buffer to data...", end=" ")
+    print(f"Masking Z grid ...", end=" ")
 
     # take one variable to determine where data is present
-    var = f"P({indicators[0]})"
+    var = indicator_names[0]
     da = ds[var]
 
     # "data present" = non-NaN
     has = da.notnull()
 
     # for each (y,x) cell, find top and bottom z with data
-    top_z = ds["Z"].where(has).max("Z").rename("top_z")  # (Y,X)
-    bot_z = ds["Z"].where(has).min("Z").rename("bot_z")  # (Y,X)
+    top_z = ds["z"].where(has).max("z").rename("top_z")  # (Y,X)
+    bot_z = ds["z"].where(has).min("z").rename("bot_z")  # (Y,X)
 
     # stack -> 1D list of (Y,X) cells, drop NaNs
-    top_1d = top_z.stack(cell=("Y", "X")).dropna("cell")
-    bot_1d = bot_z.stack(cell=("Y", "X")).dropna("cell")
+    top_1d = top_z.stack(cell=("y", "x")).dropna("cell")
+    bot_1d = bot_z.stack(cell=("y", "x")).dropna("cell")
 
     # coordinates of cell centers with data, and their top/bottom z values
-    xp_top = top_1d["X"].values
-    yp_top = top_1d["Y"].values
+    xp_top = top_1d["x"].values
+    yp_top = top_1d["y"].values
     vp_top = top_1d.values.astype(np.float64)
 
-    xp_bot = bot_1d["X"].values
-    yp_bot = bot_1d["Y"].values
+    xp_bot = bot_1d["x"].values
+    yp_bot = bot_1d["y"].values
     vp_bot = bot_1d.values.astype(np.float64)
 
-    xg = ds["X"].values
-    yg = ds["Y"].values
+    xg = ds["x"].values
+    yg = ds["y"].values
 
     # interpolate top and bottom surfaces to grid using IDW
     top_grid = _preproc_helper.idw_to_grid(xp_top, yp_top, vp_top, xg, yg, k=12, p=2.0)
     bot_grid = _preproc_helper.idw_to_grid(xp_bot, yp_bot, vp_bot, xg, yg, k=12, p=2.0)
 
     # create DataArrays for top and bottom surfaces
-    top_surf = xr.DataArray(top_grid, coords={"Y": ds["Y"], "X": ds["X"]}, dims=("Y", "X"), name="top_surf")
-    bot_surf = xr.DataArray(bot_grid, coords={"Y": ds["Y"], "X": ds["X"]}, dims=("Y", "X"), name="bot_surf")
+    top_surf = xr.DataArray(top_grid, coords={"y": ds["y"], "x": ds["x"]}, dims=("y", "x"), name="top_surf")
+    bot_surf = xr.DataArray(bot_grid, coords={"y": ds["y"], "x": ds["x"]}, dims=("y", "x"), name="bot_surf")
 
     # broadcasting top and bottom surfaces broadcasten to 3D for comparison with Z-coordinates
-    Z3, TOP3 = xr.broadcast(ds["Z"], top_surf)  # -> (Z,Y,X)
-    _, BOT3 = xr.broadcast(ds["Z"], bot_surf)
+    Z3, TOP3 = xr.broadcast(ds["z"], top_surf)  # -> (Z,Y,X)
+    _, BOT3 = xr.broadcast(ds["z"], bot_surf)
 
     # 3D z-coordinates
-    Z3 = ds["Z"].broadcast_like(ds[var])
+    Z3 = ds["z"].broadcast_like(ds[var])
 
     # mask where Z3 in between top_surf and bot_surf (with buffer)
     mask_z = ((Z3 <= top_surf) & (Z3 >= bot_surf)).rename("mask_z")

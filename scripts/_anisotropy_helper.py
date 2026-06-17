@@ -239,10 +239,25 @@ def ray_dist_to_aniso0_with_offsets(y0, x0, fresh_mask, data_mask, line2d, ix, i
         ya = y0[idx] + iy[k]
 
         # Drop seeds that would step outside the grid at this k
+        # inside = (xa >= 0) & (xa < nx) & (ya >= 0) & (ya < ny)
+        # active[idx[~inside]] = False
+        # if not inside.any():
+        #     continue
+
+
         inside = (xa >= 0) & (xa < nx) & (ya >= 0) & (ya < ny)
-        active[idx[~inside]] = False
+
+        # Rays that leave the grid without hitting salt:
+        # keep the last fresh distance found so far
+        oob_idx = idx[~inside]
+        if oob_idx.size:
+            out_fresh[oob_idx] = last_fresh_dist[oob_idx]
+            out_ok3[oob_idx] = (l3[oob_idx] != -1)
+            active[oob_idx] = False
+
         if not inside.any():
             continue
+
 
         xa = xa[inside]
         ya = ya[inside]
@@ -291,5 +306,11 @@ def ray_dist_to_aniso0_with_offsets(y0, x0, fresh_mask, data_mask, line2d, ix, i
 
             # Deactivate seeds that have reached the boundary
             active[hit_idx] = False
+    
+    # Rays that never hit a boundary: keep the last fresh distance found
+    if active.any():
+        out_fresh[active] = last_fresh_dist[active]
+        out_ok3[active] = (l3[active] != -1)
+
 
     return out_salt, out_fresh, out_ok3

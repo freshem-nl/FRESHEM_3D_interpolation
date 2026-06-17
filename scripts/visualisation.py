@@ -23,6 +23,9 @@ def plot_df(df, name, cfg):
     # from config
     dir_plot = cfg["dir_plot"]
 
+    # replace "rho" with "ρ" in column names for better plot labels
+    df.columns = [col.replace("rho", "ρ") for col in df.columns]
+
     os.makedirs(dir_plot, exist_ok=True)
     for var in df.columns:
         path = dir_plot / f"{name} - {var}.png"
@@ -40,11 +43,16 @@ def plot_ds(ds, name, cfg):
     dir_plot = cfg["dir_plot"]
     plotting_depths = cfg["plotting_depths"]
     indicator_names = cfg["indicator_names"]
+    quantile_names = cfg["quantile_names"]
 
     # select target depths (exact match or nearest)
-    depths = ds["Z"].sel(Z=np.array(plotting_depths), method="nearest").values
+    depths = ds["z"].sel(z=np.array(plotting_depths), method="nearest").values
 
     os.makedirs(dir_plot, exist_ok=True)
+
+    #replace rho with "ρ" for all data vars in ds
+    ds = ds.rename({var: var.replace("rho", "ρ") for var in ds.data_vars})
+
     for var in ds.data_vars:
 
         # histogram
@@ -54,8 +62,8 @@ def plot_ds(ds, name, cfg):
         histogram(series, path, cfg)
 
         # If the variable has a Z dimension: make one plot per target depth
-        if "Z" in da.dims:
-            plot_items = [(depth, da.sel(Z=depth)) for depth in depths]
+        if "z" in da.dims:
+            plot_items = [(depth, da.sel(z=depth)) for depth in depths]
         # If the variable has no Z dimension: still make one 2D plot
         else:
             plot_items = [(None, da)]
@@ -63,7 +71,7 @@ def plot_ds(ds, name, cfg):
         for depth, da_plot in plot_items:
 
             # log colorscale for quantiles, linear for indicators
-            if var.startswith("Q"):
+            if var in quantile_names:
                 vals = da_plot.values
                 vals = vals[np.isfinite(vals) & (vals > 0)]
                 vmin, vmax = np.quantile(vals, [0.02, 0.98])

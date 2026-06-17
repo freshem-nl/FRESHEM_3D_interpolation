@@ -6,17 +6,19 @@ import xarray as xr
 from scripts import _anisotropy_helper, visualisation
 
 
-def main(cfg):
+def from_data(data_g, cfg):
 
     t0 = datetime.now()
     print("Anisotropy estimation...", end=" ")
 
-    path_gridded_data = cfg["path_preproc_data_gridded"]
+    # from config
     cellsize_xy = cfg["cellsize_xy"]
     cellsize_z = cfg["cellsize_z"]
 
-    indicator = cfg["aniso_indicator"]
-    indicator_z_range = cfg["aniso_indicator_z_range"]
+    aniso_ind = cfg["aniso_indicator"]
+    inds = cfg["indicators"]
+    ind_names = cfg["indicator_names"]
+    ind_z_range = cfg["aniso_indicator_z_range"]
     long_axis_min = cfg["aniso_long_axis_min"]
     long_axis_max = cfg["aniso_long_axis_max"]
     short_axis_max = cfg["aniso_short_axis_max"]
@@ -26,54 +28,50 @@ def main(cfg):
     dir_plot = cfg["dir_plot"]
     variable_unit = cfg["variable_unit"]
 
-    # read data
-    ds = read_and_write.read_dataset(path_gridded_data)
+    # get the name of the anisotropy indicator variable (e.g. "cl_ind5")
+    aniso_ind_name = ind_names[inds.index(aniso_ind)]
 
     # Create boolean mask of gridcells containing data
-    ds["data_mask"] = ds[f"P({indicator})"].notnull()
+    data_mask = data_g[aniso_ind_name].notnull()#.any(dim="variable")
 
     # Create boolean mask of gridcells containing median value greather than anisotropy_indicator
-    ds["fresh_mask"] = (ds[f"P({indicator})"] < 0.5).astype(bool)
-    # cond = (ds[f"P({anisotropy_indicator})"] < 0.5)
+    fresh_mask = (data_g[aniso_ind_name] < 0.5).astype(bool)
 
     # Seed mask for anisotropy estimation:
     # True only where ALL cells within +/- anisotropy_indicator_z_range are FRESH.
-    n = int(np.ceil(indicator_z_range / abs(cellsize_z)))  # Convert meters to number of vertical cells
-    aniso_mask = ds["fresh_mask"].copy()
+    n = int(np.ceil(ind_z_range / abs(cellsize_z)))  # Convert meters to number of vertical cells
+    aniso_mask = fresh_mask.copy()
     for k in range(1, n + 1):
         aniso_mask = (
-            aniso_mask & ds["fresh_mask"].shift(z=+k, fill_value=False) & ds["fresh_mask"].shift(z=-k, fill_value=False)
+            aniso_mask & fresh_mask.shift(z=+k, fill_value=False) & fresh_mask.shift(z=-k, fill_value=False)
         )
 
-    ds["aniso_mask"] = aniso_mask.astype(bool)
+    aniso_mask = aniso_mask.astype(bool)
 
     # Precompute offsets once per heading
     angle_step = 5
-    thetas = list(range(0, 181, angle_step))  # 0..180 inclusive
+    thetas = list(range(0, 180, angle_step))  # 0..180 exclusive
     angles_needed = sorted({t % 360 for t in thetas} | {(t + 180) % 360 for t in thetas})
     dict_offsets = {
         a: _anisotropy_helper.ray_offsets(a, cellsize=cellsize_xy, maxdist=long_axis_max) for a in angles_needed
     }
 
     # Preallocate outputs (z,y,x)
-    nz, ny, nx = ds.sizes["z"], ds.sizes["y"], ds.sizes["x"]
+    nz, ny, nx = data_g.sizes["z"], data_g.sizes["y"], data_g.sizes["x"]
 
     short_dist = np.full((nz, ny, nx), np.nan, np.float32)
     short_angle = np.full((nz, ny, nx), np.nan, np.float32)
     long_dist = np.full((nz, ny, nx), np.nan, np.float32)
     long_angle = np.full((nz, ny, nx), np.nan, np.float32)
 
-    for iz in range(ds.sizes["z"]):
-        sl = ds.isel(z=iz)
-        # for iz,z in enumerate([-7.5]):  # just one slice for testing
-        #     sl = ds.sel(z=z)
+    for iz in range(data_g.sizes["z"]):
+        sl_data = data_g.isel(z=iz)
 
-        # print(f"Processing z={z}...")
         # select 2D slice
-        aniso_mask2d = sl["aniso_mask"].values
-        fresh_mask2d = sl["fresh_mask"].values
-        data_mask2d = sl["data_mask"].values
-        line2d = sl["LINE_NO"].values
+        aniso_mask2d = aniso_mask.isel(z=iz).values
+        fresh_mask2d = fresh_mask.isel(z=iz).values
+        data_mask2d = data_mask.isel(z=iz).values
+        line2d = sl_data["line_no"].values
 
         # Skip slices with no active cells
         if not aniso_mask2d.any():
@@ -131,6 +129,7 @@ def main(cfg):
             valid = valid_fwd & valid_bwd
 
             # Candidate long-axis length only if BOTH halves are valid
+            # combine forward and backward distance for valid candidates (treat as total length)
             cand = np.where(valid, dist_fresh_fwd + dist_fresh_bwd, np.nan).astype(np.float32)
 
             # Update per-cell maximum (NaN-safe)
@@ -156,46 +155,44 @@ def main(cfg):
         long_angle[iz] = long_angle2d
 
     # Write back into ds
-    ds["short_dist"] = (("z", "y", "x"), short_dist)
-    ds["short_angle"] = (("z", "y", "x"), short_angle)
-    ds["long_dist"] = (("z", "y", "x"), long_dist)
-    ds["long_angle"] = (("z", "y", "x"), long_angle)
+    data_g["short_dist"] = (("z", "y", "x"), short_dist)
+    data_g["short_angle"] = (("z", "y", "x"), short_angle)
+    data_g["long_dist"] = (("z", "y", "x"), long_dist)
+    data_g["long_angle"] = (("z", "y", "x"), long_angle)
 
-    read_and_write.write_dataset(ds, cfg["path_data_anisotropy"])
+    # # VISUALISATION
+    # # select target depths (exact match or nearest)
+    # target_depths = np.array(plotting_depths)
+    # depths = data_g["z"].sel(z=target_depths, method="nearest").values
 
-    # VISUALISATION
-    # select target depths (exact match or nearest)
-    target_depths = np.array(plotting_depths)
-    depths = ds["z"].sel(z=target_depths, method="nearest").values
+    # for z in depths:
+    #     sl_pred = data_g.sel(z=z)
 
-    for z in depths:
-        sl = ds.sel(z=z)
+    #     data_mask = data_mask.isel(z=z).values  # bool
+    #     fresh_mask = fresh_mask.isel(z=z).values  # bool
 
-        data_mask = sl["data_mask"]  # bool
-        fresh_mask = sl["fresh_mask"]
+    #     bg = xr.where(~data_mask, -1, xr.where(fresh_mask, 1, 0)).astype(np.int8)
 
-        bg = xr.where(~data_mask, -1, xr.where(fresh_mask, 1, 0)).astype(np.int8)
-
-        # max_angle/max_dist/min_dist are your numpy 2D arrays from the loop
-        path = dir_plot / "depth_slices" / f"data - anisotropy at z={z}m.png"
-        visualisation.anisotropy(
-            sl,
-            bg,
-            max_angle=sl["long_angle"].values,
-            max_dist=sl["long_dist"].values,
-            min_dist=sl["short_dist"].values,
-            stride=2,  # tune: 8..20 typically
-            scale=0.2,
-            alpha=0.5,
-            lw=0.6,
-            edgecolor="black",
-            variable_value=indicator,
-            variable_unit=variable_unit,
-            use_half_long=True,  # often correct if max_dist is fwd+bwd total
-            use_half_short=False,  # min_dist is single-direction -> treat as radius
-            path=path,
-        )
+    #     # max_angle/max_dist/min_dist are your numpy 2D arrays from the loop
+    #     path = dir_plot / "depth_slices" / f"data - anisotropy at z={z}m.png"
+    #     visualisation.anisotropy(
+    #         sl_pred,
+    #         bg,
+    #         max_angle=sl_pred["long_angle"].values,
+    #         max_dist=sl_pred["long_dist"].values,
+    #         min_dist=sl_pred["short_dist"].values,
+    #         stride=2,  # tune: 8..20 typically
+    #         scale=0.2,
+    #         alpha=0.5,
+    #         lw=0.6,
+    #         edgecolor="black",
+    #         variable_value=aniso_ind,
+    #         variable_unit=variable_unit,
+    #         use_half_long=True,  # often correct if max_dist is fwd+bwd total
+    #         use_half_short=False,  # min_dist is single-direction -> treat as radius
+    #         path=path,
+    #     )
 
     print(f"done ({datetime.now() - t0})")
 
-    return ds
+    return data_g
