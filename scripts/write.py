@@ -42,9 +42,6 @@ def ds_to_tiff(ds, dir_output, name):
 
         da = da.transpose("z", "y", "x")
 
-        # da = da.rio.set_spatial_dims(x_dim="X", y_dim="Y")
-
-        # da.rio.to_raster(path.with_suffix(f"_{var}.tif"))
         da = da.astype("float32")
         da = da.fillna(-9999)
         da = da.rio.write_nodata(-9999)
@@ -53,12 +50,44 @@ def ds_to_tiff(ds, dir_output, name):
 
         da.attrs["long_name"] = [f"z={z:.1f} m" for z in z_vals]
 
-        # Explicitly define spatial dimensions for this DataArray
-        # da = da.rio.set_spatial_dims(x_dim="X", y_dim="Y")
-
-
         path = dir_output / f"{name} - {var}.tif"
         da.rio.to_raster(path)
+
+def ds_anisotropy_to_tif(
+    ds,
+    name,
+    cfg
+):
+    """Export one z-slice from a 3D xarray Dataset as a 2-band GeoTIFF."""
+
+    dir_output = cfg["dir_rasters"]
+    plotting_depths = cfg["plotting_depths"]
+
+    os.makedirs(dir_output, exist_ok=True)
+
+    # select target depths (exact match or nearest)
+    depths = ds["z"].sel(z=np.array(plotting_depths), method="nearest").values
+
+    for depth in depths:
+        # Select a 2D slice by z value or index
+        ds_2d = ds.sel(z=depth, method="nearest")
+
+        # Build a 2-band DataArray: band 1 = magnitude, band 2 = direction
+        da_out = ds_2d[['magnitude', 'long_angle']].to_array(dim="band")
+
+        # Use numeric band coordinates
+        da_out = da_out.assign_coords(band=[1, 2])
+
+        # Optional metadata for band interpretation
+        da_out.attrs["long_name"] = ['magnitude', 'direction']
+
+        # Set nodata
+        da_out = da_out.rio.write_nodata(np.nan)
+
+        # Export as multiband GeoTIFF
+        path = dir_output / f"{name} - at z={depth}m.tif"
+        da_out.rio.to_raster(path)
+
 
 
 def txt_to_yaml(data, path):

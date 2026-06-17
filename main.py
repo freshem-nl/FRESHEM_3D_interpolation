@@ -19,19 +19,6 @@ from scripts import (
     xval,
 )
 
-# TODO:
-# - model definitie toevoegen tov maaiveld (layer, top, bottom) voor opgeschaalde berekening res -> Cl
-# - anisotropie berekenen en toepassen in geostatistische interpolatie
-# - anisotropie op data in mutlithreading
-# - visualisatie als arcgis vector field (simpel, ipv stretched. Heeft nodig: richting, magnitude)
-# - beter bovenkant model:
-#       - Freshem Zeeland: residu bepalen tussen model zomergrondwaterstand en bovenste HEM meting, interpolatie van residu geeft bovenkant model
-#       - nu wellicht grondwatermodel gebruiken: https://www.pdok.nl/introductie/-/article/bro-model-grondwaterspiegeldiepte-wdm-
-#       - of onafhankelijke (anisotrope) interpolatie van bovenste HEM metingen
-# - al gedaan (?): in geostat.kriging: memory efficienter maken door geen kopieen van volledige dataset te maken
-# - percentiles_to_indicators: comments toevoegen
-# - resample_layers_to_z: comments toevoegen
-
 
 def main(cfg):
     t = datetime.now()
@@ -65,15 +52,10 @@ def main(cfg):
         data_g = preproc_grid.snap_data_to_grid(data, cfg)
         if method == "geostat":
             data_g = anisotropy.from_data(data_g, cfg)
-            # write.ds_to_tiff(data_g, cfg["dir_rasters"], "anisotropy")  # for visualisation
-            a=1
+            data_g['magnitude'] = 1000/data_g['short_dist']
+            write.ds_anisotropy_to_tif(data_g, "preproc - data anisotropy", cfg)
         write.dataset(data_g, cfg["path_preproc_data_gridded"])
         visualisation.plot_ds(data_g, "preproc - gridded data", cfg)
-
-    data_g = read.dataset(cfg["path_preproc_data_gridded"])
-    write.ds_to_tiff(data_g[['short_dist', 'long_angle']], cfg["dir_rasters"], "anisotropy")  # for visualisation
-    a=1
-
 
     def preprocessing_prediction_grid():
         data_g = read.dataset(cfg["path_preproc_data_gridded"])
@@ -83,10 +65,7 @@ def main(cfg):
         if method == "ml":
             pred = preproc_ml.OGC(pred, cfg)
         if method == "geostat":
-            # schrijf dit weg in aparte dataset data_aniso
-            # pred = anisotropy.from_data(data_g, pred, cfg)  # add aniso to pred
-            # maak plots van data_aniso
-            # interpoleer data_aniso parameters naar relevante ellips parameters (hoek, lengte korte-as) in pred
+            # interpoleer data_aniso parameters naar relevante ellips parameters (hoek, ratio) in pred
             pass
         write.dataset(pred, cfg["path_preproc_prediction_grid"])
         visualisation.plot_ds(pred, "preproc - prediction grid", cfg)
@@ -138,8 +117,8 @@ def main(cfg):
     # preprocessing_data()
     # preprocessing_data_gridded()
     # preprocessing_prediction_grid()
-    # interpolation()
-    # postprocessing()
+    interpolation()
+    postprocessing()
     # interpolation_xval()
     # xval_scoring()
 
