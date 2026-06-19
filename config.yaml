@@ -1,9 +1,7 @@
 name: anisotropy
 method: "geostat" # geostat, ml
 
-#paths
-dir_base: "c:/WERK/DATA/FRESHEM/Interpolation"
-dir_input: "Zeeland test data"
+# paths — set dir_base and dir_input in config.local.yaml (see config.local.yaml.example)
 
 # rho
 data_input: "LCI_Sharp_MOD_inv.xyz"

@@ -6,9 +6,23 @@ import yaml
 
 def load_config(path="config.yaml"):
 
+    path = Path(path)
     print(f"\nloading config from {path}")
     with open(path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
+
+    local_path = path.parent / "config.local.yaml"
+    if local_path.exists():
+        print(f"loading local overrides from {local_path}")
+        with open(local_path, "r", encoding="utf-8") as f:
+            local_cfg = yaml.safe_load(f) or {}
+        cfg.update(local_cfg)
+
+    if not cfg.get("dir_base") or not cfg.get("dir_input"):
+        raise FileNotFoundError(
+            f"dir_base and dir_input must be set in {local_path} "
+            "(copy from config.local.yaml.example)"
+        )
 
     t0 = datetime.today()
 
@@ -19,7 +33,9 @@ def load_config(path="config.yaml"):
     # paths
     cfg["dir_base"] = Path(cfg["dir_base"])
     cfg["dir_input"] = cfg["dir_base"] / cfg["dir_input"]
-    cfg["dir_output"] = cfg["dir_base"] / "output" / f'{t0.strftime("%Y%m%d")} - {cfg["method"]} - {cfg["variable_name"]} - {cfg["name"]}'
+    run_name = f'{t0.strftime("%Y%m%d")} - {cfg["method"]} - {cfg["variable_name"]} - {cfg["name"]}'
+    output_base = Path(cfg["dir_output_base"]) if cfg.get("dir_output_base") else cfg["dir_base"] / "output"
+    cfg["dir_output"] = output_base / run_name
     cfg["dir_data"] = cfg["dir_output"] / "data"
     cfg["dir_plot"] = cfg["dir_output"] / "plots"
     cfg["dir_rasters"] = cfg["dir_output"] / "rasters"
