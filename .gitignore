@@ -57,7 +57,11 @@ coverage.xml
 .ipynb_checkpoints
 
 # VS Code
-.vscode/
+.vscode
+
+# Personal
+snippets_chris
+config.local.yaml
 
 # OS-specific files
 .DS_Store
