@@ -55,7 +55,7 @@ def main(cfg):
             data_g['magnitude'] = 1000/data_g['short_dist']
             write.ds_anisotropy_to_tif(data_g, "preproc - data anisotropy", cfg)
         write.dataset(data_g, cfg["path_preproc_data_gridded"])
-        visualisation.plot_ds(data_g, "preproc - gridded data", cfg)
+        # visualisation.plot_ds(data_g, "preproc - gridded data", cfg)
 
     def preprocessing_prediction_grid():
         data_g = read.dataset(cfg["path_preproc_data_gridded"])
@@ -68,7 +68,7 @@ def main(cfg):
             # interpoleer data_aniso parameters naar relevante ellips parameters (hoek, ratio) in pred
             pass
         write.dataset(pred, cfg["path_preproc_prediction_grid"])
-        visualisation.plot_ds(pred, "preproc - prediction grid", cfg)
+        # visualisation.plot_ds(pred, "preproc - prediction grid", cfg)
 
     def interpolation():
         pred = read.dataset(cfg["path_preproc_prediction_grid"])
@@ -115,10 +115,10 @@ def main(cfg):
         xval.validation(cfg)
 
     # preprocessing_data()
-    # preprocessing_data_gridded()
-    # preprocessing_prediction_grid()
+    preprocessing_data_gridded()
+    preprocessing_prediction_grid()
     interpolation()
-    postprocessing()
+    # postprocessing()
     # interpolation_xval()
     # xval_scoring()
 
