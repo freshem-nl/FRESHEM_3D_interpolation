@@ -6,7 +6,6 @@ paths:
 
 vertical_dim: z
 dim_mapping: {}
-z_offset: 0.0
 
 variables:
   - "P(rho≤1)"

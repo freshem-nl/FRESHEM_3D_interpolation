@@ -2,8 +2,8 @@
 # UNC paths: use single quotes or forward slashes (not double-quoted "\\server\..." — YAML treats \t as tab)
 
 paths:
-  nc_file: ""
-  dst_dir: ""
+  nc_file: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_Nextcloud\Team4-Chloride\test_data\interpolation\20260610_ZLN-clipped_nmc250_chloride - geostat - cl - 3D interpolation - small area.nc'
+  dst_dir: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_Nextcloud\Team4-Chloride\test_data\interpolation\imod\idf_files'
 
 # z for 3D voxel model, layer for 2D layer model
 vertical_dim: z
@@ -11,8 +11,18 @@ dim_mapping:
   Z: z
   Y: y
   X: x
-z_offset: 0.0
 
 variables:
-  - "P(rho≤1)"
-  - "P(rho≤5)"
+  - "P(150)"
+  # - "P(300)"
+  - "P(500)"
+  # - "P(750)"
+  # - "P(1000)"
+  # - "P(1250)"
+  - "P(1500)"
+  # - "P(2000)"
+  # - "P(3000)"
+  # - "P(5000)"
+  # - "P(7500)"
+  # - "P(10000)"
+  # - "P(15000)"

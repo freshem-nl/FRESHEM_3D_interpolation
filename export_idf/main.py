@@ -45,7 +45,6 @@ def main(cfg):
         cfg["variables"],
         cfg["vertical_dim"],
         cfg.get("dim_mapping", {}),
-        float(cfg.get("z_offset", 0.0)),
     )
     print(f"done.\n...output in {dst_dir}\n")
 

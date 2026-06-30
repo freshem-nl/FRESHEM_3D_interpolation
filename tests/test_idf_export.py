@@ -43,9 +43,9 @@ def test_export_voxel_model(tmp_path):
     ds.to_netcdf(nc_path)
 
     dst_dir = tmp_path / "idf"
-    export_netcdf(nc_path, dst_dir, ["P(rho≤5)"], vertical_dim="z", z_offset=-0.25)
+    export_netcdf(nc_path, dst_dir, ["P(rho≤5)"], vertical_dim="z")
 
-    path = dst_dir / "P_rho_le_5" / "idx_000_NAP_-50_25.idf"
+    path = dst_dir / "P_rho_le_5" / "idx_000_NAP_-50_00.idf"
     assert path.is_file()
     back = imod.idf.open(path)
     np.testing.assert_allclose(back.sortby("y").values, data[0], rtol=1e-5)

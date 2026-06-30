@@ -12,7 +12,7 @@ def var_folder(name):
     return re.sub(r"[^\w]+", "_", name).strip("_")
 
 
-def export_netcdf(nc_path, dst_dir, variables, vertical_dim, dim_mapping=None, z_offset=0.0):
+def export_netcdf(nc_path, dst_dir, variables, vertical_dim, dim_mapping=None):
 
     ds = xr.open_dataset(nc_path)
     try:
@@ -33,7 +33,7 @@ def export_netcdf(nc_path, dst_dir, variables, vertical_dim, dim_mapping=None, z
                 if vertical_dim == "layer":
                     fname = f"idx_{idx:03d}_layer_{int(value):02d}.idf"
                 else:
-                    z = format(float(value) + z_offset, ".2f").replace(".", "_")
+                    z = format(float(value), ".2f").replace(".", "_")
                     fname = f"idx_{idx:03d}_NAP_{z}.idf"
 
                 imod.idf.save(out_dir / fname, slab)
