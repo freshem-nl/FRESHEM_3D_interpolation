@@ -1,0 +1,13 @@
+# Set paths in config.local.yaml (copy from config.local.yaml.example)
+
+paths:
+  nc_file: ""
+  dst_dir: ""
+
+# z for 3D voxel model, layer for 2D layer model
+vertical_dim: z
+z_offset: 0.0
+
+variables:
+  - "P(rho≤1)"
+  - "P(rho≤5)"

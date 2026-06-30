@@ -1,0 +1,10 @@
+paths:
+  nc_file: "C:/path/to/output/data/LCI_Sharp_MOD_inv - geostat - rho.nc"
+  dst_dir: "C:/path/to/output/idf"
+
+vertical_dim: z
+z_offset: 0.0
+
+variables:
+  - "P(rho≤1)"
+  - "P(rho≤5)"
