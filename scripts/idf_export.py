@@ -12,12 +12,16 @@ def var_folder(name):
     return re.sub(r"[^\w]+", "_", name).strip("_")
 
 
-def export_netcdf(nc_path, dst_dir, variables, vertical_dim, z_offset=0.0):
+def export_netcdf(nc_path, dst_dir, variables, vertical_dim, dim_mapping=None, z_offset=0.0):
 
     ds = xr.open_dataset(nc_path)
     try:
         for var_name in variables:
             da = ds[var_name]
+            dim_mapping_var = {old: new for old, new in (dim_mapping or {}).items() if old in da.dims}
+            if dim_mapping_var:
+                da = da.rename(dim_mapping_var)
+
             out_dir = Path(dst_dir) / var_folder(var_name)
             out_dir.mkdir(parents=True, exist_ok=True)
 

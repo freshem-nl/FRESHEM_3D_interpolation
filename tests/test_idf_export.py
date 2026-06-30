@@ -49,3 +49,25 @@ def test_export_voxel_model(tmp_path):
     assert path.is_file()
     back = imod.idf.open(path)
     np.testing.assert_allclose(back.sortby("y").values, data[0], rtol=1e-5)
+
+
+def test_export_uppercase_dims_with_mapping(tmp_path):
+    data = np.arange(4, dtype=np.float32).reshape(1, 2, 2)
+    ds = xr.Dataset(
+        coords={"Z": [-50.0], "X": [100.0, 150.0], "Y": [200.0, 250.0]},
+        data_vars={"P(150)": (("Z", "Y", "X"), data)},
+    )
+    nc_path = tmp_path / "pred.nc"
+    ds.to_netcdf(nc_path)
+
+    dst_dir = tmp_path / "idf"
+    export_netcdf(
+        nc_path,
+        dst_dir,
+        ["P(150)"],
+        vertical_dim="z",
+        dim_mapping={"Z": "z", "Y": "y", "X": "x"},
+    )
+
+    path = dst_dir / "P_150" / "idx_000_NAP_-50_00.idf"
+    assert path.is_file()

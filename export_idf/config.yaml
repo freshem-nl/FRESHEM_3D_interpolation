@@ -1,4 +1,5 @@
 # Set paths in config.local.yaml (copy from config.local.yaml.example)
+# UNC paths: use single quotes or forward slashes (not double-quoted "\\server\..." — YAML treats \t as tab)
 
 paths:
   nc_file: ""
@@ -6,6 +7,10 @@ paths:
 
 # z for 3D voxel model, layer for 2D layer model
 vertical_dim: z
+dim_mapping:
+  Z: z
+  Y: y
+  X: x
 z_offset: 0.0
 
 variables:
