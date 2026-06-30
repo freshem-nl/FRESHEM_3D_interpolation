@@ -73,6 +73,8 @@ def main(cfg):
         write.dataset(pred, cfg["path_preproc_prediction_grid"])
         visualisation.plot_ds(pred, "preproc - prediction grid", cfg)
 
+        # write.ds_to_tiff(pred, cfg["path_preproc_prediction_grid"].with_name("test.tif"), "pred")
+
     def interpolation():
         data = read.table(cfg["path_preproc_data"])
         pred = read.dataset(cfg["path_preproc_prediction_grid"])
@@ -86,10 +88,13 @@ def main(cfg):
         write.ds_to_tiff(pred, cfg["dir_rasters"], "pred")
         visualisation.plot_ds(pred, "prediction", cfg)
 
-    # def postprocessing():
-    #     ds = postproc.ds_ind_probs_to_quantiles(cfg)
-    #     visualisation.plot_ds(ds, "postproc", cfg)
-    #     write.ds_to_tiff(ds, cfg["dir_rasters"], "postproc")
+    def postprocessing():
+        pred = read.dataset(cfg["path_prediction"])
+        #TODO: voxelise pred taking into account partial layer-voxel overlap
+        pred_vox = postproc.layer_to_voxelmodel(pred, cfg)
+        pred_vox_quant = postproc.ds_ind_probs_to_quantiles(cfg)
+        visualisation.plot_ds(pred_vox_quant, "postproc", cfg)
+        write.ds_to_tiff(pred_vox_quant, cfg["dir_rasters"], "postproc")
 
     def interpolation_xval():
         pred = read.dataset(cfg["path_preproc_prediction_grid"])

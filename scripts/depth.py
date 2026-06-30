@@ -113,58 +113,30 @@ def layers_top_bottom(data, pred, cfg):
 
     # initialize bottom layer
     pred["bottom"] = xr.full_like(pred["top"], np.nan, dtype=np.float32)
+
+    current_top = pred["top"].sel(layer=1)
+
     for layer, thickness in thickness_by_layer.items():
 
-        if layer != 1:
-            pred["top"].loc[{"layer": layer}] = (
-                pred["top"].sel(layer=layer - 1) - thickness
-            )
-
-        # start met "normale" bottom
-
-        top0 = pred["top"].sel(layer=layer)
-        bottom0 = top0 - thickness
+        bottom0 = current_top - thickness
         doi = pred[doi_col]
 
-        mask_valid = doi <= top0
+        mask_valid = current_top > doi
 
-        top = top0.where(mask_valid)
+        top = current_top.where(mask_valid)
         bottom = bottom0.where(mask_valid)
 
-        bottom = xr.where((doi > bottom0) & mask_valid, doi, bottom)
+        bottom = xr.where(
+            (doi > bottom0) & mask_valid,
+            doi,
+            bottom,
+        )
 
-
-        # write immediately correct values
         pred["top"].loc[{"layer": layer}] = top
         pred["bottom"].loc[{"layer": layer}] = bottom
+
+        current_top = bottom
 
     print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
     return pred
-
-    # # check if thickness is constant within each layer
-    # is_constant = data.groupby("layer")["thickness"].apply(
-    #     lambda s: np.allclose(s, s.iloc[0], atol=tol, rtol=0, equal_nan=False)
-    # )
-
-    # if not is_constant.all():
-    #     invalid_layers = is_constant[~is_constant].index.tolist()
-    #     raise ValueError(f"Thickness is not constant within layer(s): {invalid_layers}")
-
-    # # create dictionary of thickness for each layer
-    # thickness_by_layer = (
-    #     data.groupby("layer")["thickness"]
-    #     .first()
-    #     .to_dict()
-    # )
-
-    # # initialize bottom layer
-    # pred["bottom"] = xr.full_like(pred["top"], np.nan, dtype=np.float32)
-
-    # # assign top and bottom for each layer
-    # for layer, thickness in thickness_by_layer.items():
-    #     if not layer == 1:
-    #         pred["top"].loc[{"layer": layer}] = pred["top"].sel(layer=layer - 1) - thickness
-    #     pred["bottom"].loc[{"layer": layer}] = pred["top"].sel(layer=layer) - thickness
-
-    # return pred
