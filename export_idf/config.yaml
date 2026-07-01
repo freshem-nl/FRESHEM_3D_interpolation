@@ -12,6 +12,12 @@ dim_mapping:
   Y: y
   X: x
 
+export:
+  mode: bulk
+  filename_template: "idx_{idx:03d}_{var}_NAP_{z}.idf"
+  z_format: ".2f"
+  z_offset: -0.25
+
 variables:
   - "P(150)"
   # - "P(300)"

@@ -45,6 +45,7 @@ def main(cfg):
         cfg["variables"],
         cfg["vertical_dim"],
         cfg.get("dim_mapping", {}),
+        cfg.get("export", {}),
     )
     print(f"done.\n...output in {dst_dir}\n")
 

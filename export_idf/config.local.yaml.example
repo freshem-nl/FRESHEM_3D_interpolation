@@ -7,6 +7,12 @@ paths:
 vertical_dim: z
 dim_mapping: {}
 
+export:
+  mode: bulk
+  filename_template: "idx_{idx:03d}_{var}_NAP_{z}.idf"
+  z_format: ".2f"
+  z_offset: -0.25
+
 variables:
   - "P(rho≤1)"
   - "P(rho≤5)"
