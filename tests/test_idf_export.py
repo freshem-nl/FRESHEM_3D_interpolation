@@ -46,6 +46,91 @@ def test_export_layer_model(tmp_path):
     assert imod.idf.open(path).shape == (2, 2)
 
 
+def test_export_coloured_3d_model(tmp_path):
+    top = np.array(
+        [
+            [[-10.0, -10.0], [-10.0, -10.0]],
+            [[-20.0, -20.0], [-20.0, -20.0]],
+        ],
+        dtype=np.float32,
+    )
+    bottom = top - 5.0
+    prop = np.array(
+        [
+            [[0.1, 0.2], [0.3, 0.4]],
+            [[0.5, 0.6], [0.7, 0.8]],
+        ],
+        dtype=np.float32,
+    )
+    ds = xr.Dataset(
+        coords={"layer": [1, 2], "x": [100.0, 150.0], "y": [200.0, 250.0]},
+        data_vars={
+            "top": (("layer", "y", "x"), top),
+            "bottom": (("layer", "y", "x"), bottom),
+            "P(rho≤5)": (("layer", "y", "x"), prop),
+        },
+    )
+    nc_path = tmp_path / "pred.nc"
+    ds.to_netcdf(nc_path)
+
+    dst_dir = tmp_path / "idf"
+    export_netcdf(
+        nc_path,
+        dst_dir,
+        [],
+        vertical_dim="layer",
+        export_cfg={"mode": "coloured-3d-model", "property": "P(rho≤5)"},
+    )
+
+    out_dir = dst_dir / "P_rho_le_5"
+    expected = [
+        "001_layer01_top.idf",
+        "002_layer01_P_rho_le_5.idf",
+        "003_layer01_bottom.idf",
+        "004_layer02_top.idf",
+        "005_layer02_P_rho_le_5.idf",
+        "006_layer02_bottom.idf",
+    ]
+    for fname in expected:
+        assert (out_dir / fname).is_file()
+
+    manifest = (out_dir / "imod_load_order.txt").read_text(encoding="utf-8")
+    for fname in expected:
+        assert fname in manifest
+
+    back = imod.idf.open(out_dir / "002_layer01_P_rho_le_5.idf")
+    np.testing.assert_allclose(back.sortby("y").values, prop[0], rtol=1e-5)
+
+
+def test_export_layer_bottom_dis(tmp_path):
+    data = np.array(
+        [
+            [[1.0, 2.0], [3.0, 4.0]],
+            [[5.0, 6.0], [7.0, 8.0]],
+        ],
+        dtype=np.float32,
+    )
+    ds = xr.Dataset(
+        coords={"layer": [1, 2], "x": [100.0, 150.0], "y": [200.0, 250.0]},
+        data_vars={"bottom": (("layer", "y", "x"), data)},
+    )
+    nc_path = tmp_path / "grid.nc"
+    ds.to_netcdf(nc_path)
+
+    dst_dir = tmp_path / "dis"
+    export_netcdf(
+        nc_path,
+        dst_dir,
+        ["bottom"],
+        vertical_dim="layer",
+        export_cfg={"mode": "per-layer"},
+    )
+
+    path = dst_dir / "layer_01_B.idf"
+    assert path.is_file()
+    back = imod.idf.open(path)
+    np.testing.assert_allclose(back.sortby("y").values, data[0], rtol=1e-5)
+
 def test_export_voxel_model_bulk(tmp_path):
     data = np.arange(8, dtype=np.float32).reshape(2, 2, 2)
     ds = xr.Dataset(

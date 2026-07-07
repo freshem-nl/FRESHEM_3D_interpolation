@@ -1,3 +1,4 @@
+import argparse
 import sys
 from pathlib import Path
 
@@ -9,25 +10,22 @@ if str(ROOT) not in sys.path:
 
 from scripts import idf_export
 
+CONFIG_DIR = Path(__file__).parent
 
-def load_config():
 
-    config_dir = Path(__file__).parent
-    path = config_dir / "config.yaml"
+def load_config(config_name):
+
+    path = CONFIG_DIR / config_name
+    if not path.is_file():
+        raise FileNotFoundError(f"Config file not found: {path}")
+
     print(f"\nloading config from {path}")
     with open(path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
-    local_path = config_dir / "config.local.yaml"
-    if local_path.exists():
-        print(f"loading local overrides from {local_path}")
-        with open(local_path, "r", encoding="utf-8") as f:
-            cfg.update(yaml.safe_load(f) or {})
-
     if not cfg["paths"].get("nc_file") or not cfg["paths"].get("dst_dir"):
         raise FileNotFoundError(
-            f"paths.nc_file and paths.dst_dir must be set in {local_path} "
-            "(copy from config.local.yaml.example)"
+            f"paths.nc_file and paths.dst_dir must be set in {path}"
         )
 
     return cfg
@@ -52,5 +50,12 @@ def main(cfg):
 
 if __name__ == "__main__":
 
-    cfg = load_config()
+    ap = argparse.ArgumentParser(description="Export NetCDF variables to iMOD IDF files.")
+    ap.add_argument(
+        "--config",
+        default="config.voxel.yaml",
+        help="Config file in export_idf/ (config.voxel.yaml or config.layer.yaml)",
+    )
+    args = ap.parse_args()
+    cfg = load_config(args.config)
     main(cfg)

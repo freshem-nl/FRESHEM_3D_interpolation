@@ -1,0 +1,40 @@
+# 3D voxel model -> IDF (chloride quantiles / indicator probabilities)
+# Run: python export_idf/main.py --config config.voxel.yaml
+# UNC paths: use single quotes or forward slashes (not double-quoted "\\server\..." — YAML treats \t as tab)
+
+paths:
+
+  # nc_file: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_Nextcloud\Team4-Chloride\test_data\interpolation\20260610_ZLN-clipped_nmc250_chloride - geostat - cl - 3D interpolation - small area.nc'
+  # dst_dir: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_Nextcloud\Team4-Chloride\test_data\interpolation\imod\idf_files'
+
+  nc_file: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_Nextcloud\Team4-Chloride\test_data\interpolation\20260701_ZLZ-C3-sharp_nmc250_chloride - postproc - cl - 3D interpolation.nc'
+  dst_dir: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_Nextcloud\Team4-Chloride\test_data\interpolation\imod\idf_files_cl'
+
+vertical_dim: z
+dim_mapping:
+  Z: z
+  Y: y
+  X: x
+
+export:
+  mode: bulk
+  filename_template: "idx_{idx:03d}_{var}_NAP_{z}.idf"
+  z_format: ".2f"
+  z_offset: -0.25
+
+variables:
+  # - "P(150)"
+  # - "P(300)"
+  # - "P(500)"
+  # - "P(750)"
+  # - "P(1000)"
+  # - "P(1250)"
+  # - "P(1500)"
+  # - "P(2000)"
+  # - "P(3000)"
+  # - "P(5000)"
+  # - "P(7500)"
+  # - "P(10000)"
+  # - "P(15000)"
+
+  - "Q(0.5)"

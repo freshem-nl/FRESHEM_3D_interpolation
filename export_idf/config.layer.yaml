@@ -1,0 +1,17 @@
+# 2D layer model -> IDF for iMOD Coloured 3-D Model visualization
+# Run: python export_idf/main.py --config config.layer.yaml
+# Load order per layer: top, property, bottom (see imod_load_order.txt in output)
+
+paths:
+  nc_file: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_Nextcloud\Team4-Chloride\test_data\interpolation\20260630_SCI_Sharp_Best_MOD_inv - geostat - rho - layer model - area C3.nc'
+  dst_dir: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_Nextcloud\Team4-Chloride\test_data\interpolation\imod\idf_files_layer_rho'
+
+vertical_dim: layer
+dim_mapping: {}
+
+export:
+  mode: coloured-3d-model
+  property: "P(rho≤5)"
+  # layers: [1, 2, 3]  # optional subset for quick iMOD test
+
+variables: []
