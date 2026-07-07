@@ -114,13 +114,13 @@ def main(cfg):
     def xval_scoring():
         xval.validation(cfg)
 
-    # preprocessing_data()
-    # preprocessing_data_gridded()
-    # preprocessing_prediction_grid()
+    preprocessing_data()
+    preprocessing_data_gridded()
+    preprocessing_prediction_grid()
     interpolation()
     postprocessing()
-    # interpolation_xval()
-    # xval_scoring()
+    interpolation_xval()
+    xval_scoring()
 
     # total runtime
     print(f"\nTotal runtime: {(datetime.now() - t)}.\n\n")
