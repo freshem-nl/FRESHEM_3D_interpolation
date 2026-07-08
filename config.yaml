@@ -1,4 +1,4 @@
-name: lagenmodel groot
+name: test4
 method: "geostat" # geostat, ml
 
 # paths — set dir_base and dir_input in config.local.yaml (see config.local.yaml.example)

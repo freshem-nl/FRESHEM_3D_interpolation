@@ -16,7 +16,8 @@ def table(data, path):
     if path.suffix == ".parquet":
         data.to_parquet(path)
         # df.to_parquet(path, engine="fastparquet")
-
+    elif path.suffix == ".csv":
+        data.to_csv(path)
 
 def dataset(ds, path):
 

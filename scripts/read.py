@@ -17,6 +17,8 @@ def table(path):
             data = gpd.read_parquet(path)
         except Exception:
             data = pd.read_parquet(path)
+    if path.suffix == ".csv":
+        data = pd.read_csv(path)
 
     return data
 
@@ -117,6 +119,7 @@ def skytem_xyz(cfg):
 
         path_output.parent.mkdir(parents=True, exist_ok=True)
         write.table(df, path_output)
+        write.table(df, path_output.with_suffix(".csv"))
 
         txt = (
             f"({(datetime.now() - t0).total_seconds():.2f}s). Read {len(df)} rows with {len(df.columns)} columns"

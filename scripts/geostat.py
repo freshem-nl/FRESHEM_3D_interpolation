@@ -5,6 +5,7 @@ import isatis.constants as cst
 import numpy as np
 import pandas as pd
 import xarray as xr
+from tqdm.auto import tqdm
 
 isa.setLicenseString("52100@lic-isatis.tno.nl")
 
@@ -13,7 +14,11 @@ def kriging(data, pred, cfg, verbose=True):
     t0 = datetime.now()
     if verbose:
         print("\nSPATIAL INTERPOLATION")
-        print("indicator kriging for layer", end=" ")
+        tqdm_leave = True
+        tqdm_position = 0
+    else:
+        tqdm_leave = False
+        tqdm_position = 1
 
     # From config
     indicator_names = cfg["indicator_names"]
@@ -24,9 +29,8 @@ def kriging(data, pred, cfg, verbose=True):
     neigh_max_neigh_per_sector = cfg["neighbourhood_max_neigh_per_sector"]
 
     layers = data["layer"].unique()
-    for layer in layers:
-        if verbose:
-            print(f"{layer}...", end=" ")
+    txt = "interpolation per layer"
+    for layer in tqdm(layers, desc=txt, unit="layer", leave=tqdm_leave, position=tqdm_position):
 
         # Create Isatis input database
         input_db = isa.DbPandas(data.loc[data["layer"] == layer].reset_index())
@@ -108,8 +112,7 @@ def kriging(data, pred, cfg, verbose=True):
             # Initialise output variable if it does not exist yet
             if var not in pred:
                 pred[var] = xr.full_like(
-                    pred["mask"]
-                    .transpose("layer", "y", "x"),
+                    pred["mask"].transpose("layer", "y", "x"),
                     fill_value=np.nan,
                     dtype=np.float32,
                 )

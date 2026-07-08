@@ -9,6 +9,7 @@ from matplotlib.collections import PatchCollection
 from matplotlib.colors import BoundaryNorm, ListedColormap, LogNorm, Normalize
 from matplotlib.patches import Ellipse
 from sklearn.metrics import ConfusionMatrixDisplay
+from tqdm.auto import tqdm
 
 
 def plot_df(df, name, cfg):
@@ -18,16 +19,22 @@ def plot_df(df, name, cfg):
     # drop geometry column in case it's a geodataframe
     df = df.drop(columns="geometry", errors="ignore")
 
-    print(f"Plotting histograms for dataframe {df.columns.to_list()}...", end=" ")
-
     # from config
     dir_plot = cfg["dir_plot"]
 
     os.makedirs(dir_plot, exist_ok=True)
-    for var in df.columns:
+
+    txt = f"Plotting histograms for dataframe {df.columns.to_list()}..."
+    for var in tqdm(df.columns, desc=txt, unit="var"):
+
         path = dir_plot / f"{name} - {var}.png"
 
         histogram(df[var], path, cfg)
+
+        if var == cfg["variable_name"]:
+            for layer in df["layer"].unique():
+                path = dir_plot / f"{name} - {var} - layer {layer}.png"
+                histogram(df[df["layer"] == layer][var], path, cfg)
 
     print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
@@ -41,7 +48,7 @@ def plot_ds(ds, name, cfg):
     quantile_names = cfg["quantile_names"]
     plotting_layers = cfg["plotting_layers"]
 
-    print(f"plotting dataset {list(ds.data_vars)} for layers {cfg['plotting_layers']}...", end=" ")
+    # print(f"plotting dataset {list(ds.data_vars)} for layers {cfg['plotting_layers']}...", end=" ")
 
     def get_norm(da, var, indicator_names, quantile_names):
         if var in quantile_names:
@@ -59,7 +66,10 @@ def plot_ds(ds, name, cfg):
 
     os.makedirs(dir_plot, exist_ok=True)
 
-    for var in ds.data_vars:
+    txt = f"plotting dataset {list(ds.data_vars)} for layers {cfg['plotting_layers']}"
+    for var in tqdm(ds.data_vars, desc=txt, unit="var"):
+
+        # for var in ds.data_vars:
         da = ds[var]
 
         # histogram

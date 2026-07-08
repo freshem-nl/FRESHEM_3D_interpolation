@@ -30,35 +30,19 @@ def main(cfg):
     method = cfg["method"]
 
     def preprocessing_data():
-        if cfg["variable_name"].lower() == "rho":
-            data = read.skytem_xyz(cfg)
-            data = preproc_data.restructure(data, cfg)
-            data = preproc_data.quantiles_and_indicator_probs(data, cfg)
-        # elif cfg["variable_name"].lower() == "cl":
-        #     data = read.deltares_cl(cfg)
-        #     data = preproc_data.percentiles_to_indicators(data, cfg)
-        #     data = preproc_data.resample_layers_to_z(data, cfg)
+        data = read.skytem_xyz(cfg)
+        data = preproc_data.restructure(data, cfg)
+        data = preproc_data.quantiles_and_indicator_probs(data, cfg)
         if method == "ml":
             data = preproc_ml.OGC(data, cfg)
         ###TEMP
-        # cond = (data["x"] > 39700) & (data["x"] < 43900) & (data["y"] > 391400) & (data["y"] < 397600)
-        # data = data.loc[cond]
+        cond = (data["x"] > 39700) & (data["x"] < 43900) & (data["y"] > 391400) & (data["y"] < 397600)
+        data = data.loc[cond]
         ### END TEMP
         write.table(data, cfg["path_preproc_data"])
         visualisation.plot_df(data, "preproc - data", cfg)
 
-    # def preprocessing_data_gridded():
-    #     data = read.table(cfg["path_preproc_data"])
-    # data_g = preproc_grid.snap_data_to_grid(data, cfg)
-    #     if method == "geostat":
-    #         data_g = anisotropy.from_data(data_g, cfg)
-    #         data_g["magnitude"] = 1000 / data_g["short_dist"]
-    #         write.ds_anisotropy_to_tif(data_g, "preproc - data anisotropy", cfg)
-    #     write.dataset(data_g, cfg["path_preproc_data_gridded"])
-    #     visualisation.plot_ds(data_g, "preproc - gridded data", cfg)
-
     def preprocessing_prediction_grid():
-        # data_g = read.dataset(cfg["path_preproc_data_gridded"])
         data = read.table(cfg["path_preproc_data"])
         pred = preproc_grid.initiate_grid(data, cfg)
         pred = preproc_grid.mask_overall(data, pred, cfg)
@@ -72,8 +56,6 @@ def main(cfg):
             pass
         write.dataset(pred, cfg["path_preproc_prediction_grid"])
         visualisation.plot_ds(pred, "preproc - prediction grid", cfg)
-
-        # write.ds_to_tiff(pred, cfg["path_preproc_prediction_grid"].with_name("test.tif"), "pred")
 
     def interpolation():
         data = read.table(cfg["path_preproc_data"])
@@ -90,44 +72,42 @@ def main(cfg):
 
     def postprocessing():
         pred = read.dataset(cfg["path_prediction"])
-        #TODO: voxelise pred taking into account partial layer-voxel overlap
-        pred_vox = postproc.layer_to_voxelmodel(pred, cfg)
-        pred_vox_quant = postproc.ds_ind_probs_to_quantiles(cfg)
-        visualisation.plot_ds(pred_vox_quant, "postproc", cfg)
-        write.ds_to_tiff(pred_vox_quant, cfg["dir_rasters"], "postproc")
+        pred_quant = postproc.ds_ind_probs_to_quantiles(pred, cfg)
+        write.dataset(pred_quant, cfg["path_postproc"])
+        visualisation.plot_ds(pred_quant, "postproc", cfg)
+        write.ds_to_tiff(pred_quant, cfg["dir_rasters"], "postproc")
 
     def interpolation_xval():
-        pred = read.dataset(cfg["path_preproc_prediction_grid"])
         data = read.table(cfg["path_preproc_data"])
-        data_g = read.dataset(cfg["path_preproc_data_gridded"])
+        pred = read.dataset(cfg["path_preproc_prediction_grid"])
 
-        lines = xval.xval_lines(cfg)
+        lines = xval.xval_lines(data, cfg)
         model_mask = pred["mask"].copy()  # overall mask for reuse
         txt = "crossvalidation: train without data of line, predict on line"
-        for line in tqdm(lines["line_no"].unique(), desc=txt, unit="line", leave=True):
-            pred["mask"] = xval.mask_line(lines, model_mask, line)  # only voxels in model_mask and line
+        for line in tqdm(lines, desc=txt, unit="line", leave=True, position=0):
+            data_fold = data[data["line_no"] != line].copy()  # exclude data from line
+            pred["mask"] = xval.mask_line(data, model_mask, line)  # only voxels in model_mask and line
             if method == "ml":
-                data_fold = data[data["line_no"] != line].copy()  # exclude data from line
                 model = ml.rf_train(data_fold, cfg, verbose=False)
                 pred = ml.rf_predict(model, pred, cfg, verbose=False)
             elif method == "geostat":
-                data_g_fold = data_g.copy().where(~pred["mask"])  # exclude voxels of line
-                pred = geostat.kriging(data_g_fold, pred, cfg, verbose=False)
+                pred = geostat.kriging(data_fold, pred, cfg, verbose=False)
         pred = postproc.ensure_monotonicity(pred, cfg)
         write.dataset(pred, cfg["path_prediction_xval"])
         write.ds_to_tiff(pred, cfg["dir_rasters"], "xval")
         visualisation.plot_ds(pred, "xval", cfg)
 
     def xval_scoring():
-        xval.validation(cfg)
+        data = read.table(cfg["path_preproc_data"])
+        pred_xval = read.dataset(cfg["path_prediction_xval"])
+        xval.validation(data, pred_xval,cfg)
 
     preprocessing_data()
-    # preprocessing_data_gridded()
     preprocessing_prediction_grid()
     interpolation()
-    # postprocessing()
-    # interpolation_xval()
-    # xval_scoring()
+    postprocessing()
+    interpolation_xval()
+    xval_scoring()
 
     # total runtime
     print(f"\nTotal runtime: {(datetime.now() - t)}.\n\n")
