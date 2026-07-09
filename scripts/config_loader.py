@@ -32,7 +32,7 @@ def load_config(path="config.yaml"):
 
     # paths
     cfg["dir_base"] = Path(cfg["dir_base"])
-    cfg["dir_input"] = cfg["dir_base"] / cfg["dir_input"]
+    cfg["dir_input"] = Path(cfg["dir_input"])
     run_name = f'{t0.strftime("%Y%m%d")} - {cfg["method"]} - {cfg["variable_name"]} - {cfg["name"]}'
     output_base = Path(cfg["dir_output_base"]) if cfg.get("dir_output_base") else cfg["dir_base"] / "output"
     cfg["dir_output"] = output_base / run_name
@@ -48,6 +48,7 @@ def load_config(path="config.yaml"):
     cfg["path_preproc_data_gridded"] = cfg["dir_data"] / f"{input_name} - preproc - data gridded.nc"
     cfg["path_preproc_prediction_grid"] = cfg["dir_data"] / f"{input_name} - preproc - prediction grid.nc"
     cfg["path_preproc_data_flightlines"] = cfg["dir_data"] / f"{input_name} - preproc - data - flightlines.parquet"
+    cfg["path_depths"] = cfg["dir_data"] / f"{input_name} - layer depths.nc"
     cfg["path_prediction"] = cfg["dir_data"] / f"{input_name} - {cfg['method']} - {cfg['variable_name']}.nc"
     cfg["path_prediction_xval"] = cfg["dir_data"] / f"{input_name} - xval.nc"
     cfg["path_postproc"] = cfg["dir_data"] / f"{input_name} - postproc.nc"

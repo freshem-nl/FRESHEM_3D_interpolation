@@ -16,7 +16,8 @@ def table(data, path):
     if path.suffix == ".parquet":
         data.to_parquet(path)
         # df.to_parquet(path, engine="fastparquet")
-
+    elif path.suffix == ".csv":
+        data.to_csv(path)
 
 def dataset(ds, path):
 
@@ -35,20 +36,23 @@ def ds_to_tiff(ds, dir_output, name):
     for var in ds.data_vars:
         da = ds[var]
 
+        # if set(da.dims) == {"layer", "y", "x"}:
 
-        # Only export 3D variables with Z, Y, X dimensions
-        if set(da.dims) != {"z", "y", "x"}:
-            continue
+        if set(da.dims) == {"z", "y", "x"}:
+            z_vals = ds.z.values
 
-        da = da.transpose("z", "y", "x")
+            da = da.transpose("z", "y", "x")
+            da.attrs["long_name"] = [f"z={z:.1f} m" for z in z_vals]
+
+
+        if set(da.dims) == {"layer", "y", "x"}:
+            da = da.rename({"layer": "z"}).transpose("z", "y", "x")
+            da.attrs["long_name"] = [f"layer {int(l)}" for l in da["z"].values]
+
 
         da = da.astype("float32")
         da = da.fillna(-9999)
         da = da.rio.write_nodata(-9999)
-
-        z_vals = ds.z.values
-
-        da.attrs["long_name"] = [f"z={z:.1f} m" for z in z_vals]
 
         path = dir_output / f"{name} - {var}.tif"
         da.rio.to_raster(path)

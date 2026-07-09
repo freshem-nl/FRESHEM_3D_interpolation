@@ -5,6 +5,7 @@ import isatis.constants as cst
 import numpy as np
 import pandas as pd
 import xarray as xr
+from tqdm.auto import tqdm
 
 isa.setLicenseString("52100@lic-isatis.tno.nl")
 
@@ -13,102 +14,124 @@ def kriging(data, pred, cfg, verbose=True):
     t0 = datetime.now()
     if verbose:
         print("\nSPATIAL INTERPOLATION")
-        print("indicator kriging...", end=" ")
+        tqdm_leave = True
+        tqdm_position = 0
+    else:
+        tqdm_leave = False
+        tqdm_position = 1
 
     # From config
     indicator_names = cfg["indicator_names"]
     range_xy = cfg["variogram_model_range_xy"]
-    range_z = cfg["variogram_model_range_z"]
     neigh_dist_xy = cfg["neighbourhood_dist_xy"]
     neigh_dist_z = cfg["neighbourhood_dist_z"]
     neigh_n_sectors = cfg["neighbourhood_n_sectors"]
     neigh_max_neigh_per_sector = cfg["neighbourhood_max_neigh_per_sector"]
 
-    # Create Isatis input database
-    input_db = isa.DbPandas(data.to_dataframe().dropna(subset=indicator_names).reset_index())
+    layers = data["layer"].unique()
+    txt = "interpolation per layer"
+    for layer in tqdm(layers, desc=txt, unit="layer", leave=tqdm_leave, position=tqdm_position):
 
-    # Use one fixed dimension order for everything sent to Isatis
-    pred_xyz = pred.transpose("x", "y", "z")
+        # Create Isatis input database
+        input_db = isa.DbPandas(data.loc[data["layer"] == layer].reset_index())
 
-    # Create Isatis output grid
-    grid = isa.GridGeom(
-        origin=[pred_xyz["x"].values.min(), pred_xyz["y"].values.min(), pred_xyz["z"].values.min()],
-        cell_size=[pred_xyz.attrs["cellsize_x"], pred_xyz.attrs["cellsize_y"], pred_xyz.attrs["cellsize_z"]],
-        nxyz=[pred_xyz.sizes["x"], pred_xyz.sizes["y"], pred_xyz.sizes["z"]],
-        ndim=3,
-    )
+        # Use one fixed dimension order for everything sent to Isatis
+        pred_xy = pred.sel(layer=layer).transpose("x", "y")
 
-    # Build output dataframe in the exact same grid order
-    mask = pred_xyz["mask"].values.ravel()
-    cell_id = np.arange(mask.size, dtype=np.int64)
+        # Create Isatis output grid
+        grid = isa.GridGeom(
+            origin=[pred_xy["x"].values.min(), pred_xy["y"].values.min()],
+            cell_size=[pred_xy.attrs["cellsize_x"], pred_xy.attrs["cellsize_y"]],
+            nxyz=[pred_xy.sizes["x"], pred_xy.sizes["y"]],
+            ndim=2,
+        )
 
-    df_out = pd.DataFrame({"mask": mask, "cell_id": cell_id})
+        # Build output dataframe in the exact same grid order
+        mask = pred_xy["mask"].values.ravel()
+        cell_id = np.arange(mask.size, dtype=np.int64)
 
-    output_db = isa.DbPandas(df_out, grid=grid)
+        df_out = pd.DataFrame({"mask": mask, "cell_id": cell_id})
 
-    # Make multivariate variogram model
-    n_var = len(indicator_names)
+        output_db = isa.DbPandas(df_out, grid=grid)
 
-    multi_vario = isa.VModel(nvar=n_var)
-    sill_matrix = np.zeros((n_var, n_var))
-    nugg_matrix = np.zeros((n_var, n_var))
+        # Make multivariate variogram model
+        n_var = len(indicator_names)
 
-    for i in range(n_var):
-        sill_matrix[i, i] = 0.33
-        nugg_matrix[i, i] = 0.001
+        multi_vario = isa.VModel(nvar=n_var)
+        sill_matrix = np.zeros((n_var, n_var))
+        nugg_matrix = np.zeros((n_var, n_var))
 
-    sph_struct = isa.VStruc(
-        stype=cst.MOD.SPH,
-        nvar=n_var,
-        ranges=[range_xy, range_xy, range_z],
-        sill=sill_matrix,
-    )
-    multi_vario.add_struct(sph_struct)
-    multi_vario.set_nugget(nugg_matrix)
+        for i in range(n_var):
+            sill_matrix[i, i] = 0.33
+            nugg_matrix[i, i] = 0.001
 
-    # Define neighbourhood
-    neigh = isa.Neigh(
-        n_sectors=neigh_n_sectors,
-        max_neigh_per_sector=neigh_max_neigh_per_sector,
-        ellipsoid_size=[neigh_dist_xy, neigh_dist_xy, neigh_dist_z],
-    )
+        range_dummy = range_xy
+        sph_struct = isa.VStruc(
+            stype=cst.MOD.SPH,
+            nvar=n_var,
+            ndim=2,
+            ranges=[range_xy, range_xy, range_dummy],
+            sill=sill_matrix,
+        )
+        multi_vario.add_struct(sph_struct)
+        multi_vario.set_nugget(nugg_matrix)
 
-    # Run kriging
-    runner = isa.Kriging()
-    runner.set_input_data(input_db, coords=["x", "y", "z"], invars=indicator_names)
-    runner.set_output_data(output_db, sel="mask")
-    output_db = runner.kriging(model=multi_vario, neigh=neigh)
+        # Define neighbourhood
+        neigh = isa.Neigh(
+            n_sectors=neigh_n_sectors,
+            max_neigh_per_sector=neigh_max_neigh_per_sector,
+            ellipsoid_size=[neigh_dist_xy, neigh_dist_xy, neigh_dist_z],
+        )
 
-    # Isatis database to dataframe
-    output_df = output_db.df()
-    output_df.columns = output_df.columns.str.removesuffix("_" + runner.kriging_suffix)
+        # Run kriging
+        runner = isa.Kriging()
+        runner.set_input_data(input_db, coords=["x", "y"], invars=indicator_names)
+        runner.set_output_data(output_db, sel="mask")
+        output_db = runner.kriging(model=multi_vario, neigh=neigh)
 
-    # Sort back to the original cell order
-    output_df = output_df.sort_values("cell_id").reset_index(drop=True)
+        # Isatis database to dataframe
+        output_df = output_db.df()
+        output_df.columns = output_df.columns.str.removesuffix("_" + runner.kriging_suffix)
 
-    # Keep only prediction columns
-    values = output_df[indicator_names].to_numpy(dtype=np.float32)
+        # Sort back to the original cell order
+        output_df = output_df.sort_values("cell_id").reset_index(drop=True)
 
-    # Write results back to dataset
-    grid_shape = pred_xyz["mask"].shape
+        # Keep only prediction columns
+        values = output_df[indicator_names].to_numpy(dtype=np.float32)
 
-    for i, var in enumerate(indicator_names):
-        arr_xyz = values[:, i].reshape(grid_shape)
+        # Write results back to dataset
+        grid_shape = pred_xy["mask"].shape
 
-        da = pred_xyz["mask"].copy(data=arr_xyz).astype(np.float32).rename(var)
+        for i, var in enumerate(indicator_names):
+            arr_xy = values[:, i].reshape(grid_shape)
 
-        new_da = da.transpose(*pred["mask"].dims)
+            da_xy = pred_xy["mask"].copy(data=arr_xy).astype(np.float32).rename(var)
 
-        if var in pred:
-            pred[var] = xr.where(pred["mask"], new_da, pred[var])
-        else:
-            pred[var] = new_da.where(pred["mask"])
+            da_yx = da_xy.transpose("y", "x")
+
+            # Initialise output variable if it does not exist yet
+            if var not in pred:
+                pred[var] = xr.full_like(
+                    pred["mask"].transpose("layer", "y", "x"),
+                    fill_value=np.nan,
+                    dtype=np.float32,
+                )
+
+            # overwrite with new values only within mask
+            mask = pred["mask"].sel(layer=layer)
+
+            old = pred[var].sel(layer=layer)
+
+            new = old.where(~mask, da_yx)
+
+            pred[var].loc[{"layer": layer}] = new
+
+    pred = pred.drop_vars("mask")
 
     if verbose:
-        
+
         dt = datetime.now() - t0
         m, s = divmod(round(dt.total_seconds()), 60)
         print(f"({m}m{s:02d}s)")
-
 
     return pred
