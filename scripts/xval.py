@@ -8,25 +8,21 @@ from sklearn.metrics import classification_report, confusion_matrix
 from scripts import _postproc_helper, _scoring, read, visualisation, write
 
 
-def xval_lines(cfg):
+def xval_lines(data,cfg):
 
     t0 = datetime.now()
     print("\nSPATIAL INTERPOLATION CROSS-VALIDATION")
 
     # from config
-    path_flightlines = cfg["path_preproc_data_flightlines"]
     n_lines = cfg["xval_n_lines"]
 
     print(f"select {n_lines} lines", end="... ")
 
-    # read flightlines
-    xy_lines = read.table(path_flightlines)
-
     # Count number of points per line
-    counts = xy_lines.groupby("line_no").size().sort_values(ascending=False)
+    counts = data.groupby("line_no").size().sort_values(ascending=False)
 
     # select top_lines from the longest lines, at least 50% of the lines
-    n_lines_total = xy_lines["line_no"].nunique()
+    n_lines_total = data["line_no"].nunique()
     fraction_to_select = n_lines / n_lines_total
     fraction_to_select_from = max(0.5, fraction_to_select)  # at least top 50% lines
     n_top = int(np.ceil(len(counts) * fraction_to_select_from))
@@ -37,97 +33,137 @@ def xval_lines(cfg):
     n_pick = min(n_lines, len(top_lines))  # safety if n_lines > available
     selected_lines = rng.choice(top_lines, size=n_pick, replace=False).tolist()
 
-    # filter xy_lines to selected lines
-    xy_lines_selected = xy_lines[xy_lines["line_no"].isin(selected_lines)].copy()
-
     print(f"done ({(datetime.now() - t0).total_seconds():.2f}s).")
 
-    return xy_lines_selected
+    return selected_lines
 
 
-def mask_line(df, mask_overall, line_no):
+def mask_line(data, mask_overall, line_no):
 
-    # get relevant XY for the line
-    df = df.copy()
-    df = df.loc[df["line_no"] == line_no, ["x", "y"]].drop_duplicates()
+    data_line = data.loc[data["line_no"] == line_no, ["x", "y", "layer"]]
 
-    # 2) coord -> index (exact match)
-    x_index = pd.Index(mask_overall["x"].values)
-    y_index = pd.Index(mask_overall["y"].values)
+    mask_line = xr.zeros_like(mask_overall, dtype=bool)
 
-    ix = x_index.get_indexer(df["x"].to_numpy())
-    iy = y_index.get_indexer(df["y"].to_numpy())
+    x = mask_overall.x.values
+    y = mask_overall.y.values
 
-    # 3) 2D mask met *paired* indexing
-    mask_xy_np = np.zeros((mask_overall.sizes["y"], mask_overall.sizes["x"]), dtype=bool)
-    mask_xy_np[iy, ix] = True
+    dx = np.diff(x).mean()
+    dy = np.diff(y).mean()
 
-    mask_xy = xr.DataArray(
-        mask_xy_np,
-        coords={"y": mask_overall["y"], "x": mask_overall["x"]},
-        dims=("y", "x"),
-        name="mask_xy_line",
+    x0 = x[0] - dx / 2
+    y0 = y[0] - dy / 2
+
+    ix = np.floor((data_line["x"] - x0) / dx).astype(int)
+    iy = np.floor((data_line["y"] - y0) / dy).astype(int)
+
+    valid = (
+        (ix >= 0) & (ix < len(x)) &
+        (iy >= 0) & (iy < len(y))
     )
 
-    # broadcast to Z and combine with old mask
-    new_mask = mask_overall & mask_xy.broadcast_like(mask_overall)
+    layers = data_line.loc[valid, "layer"].values
+
+    mask_line.values[
+        layers - 1,      # assuming layers are 1..30
+        iy[valid],
+        ix[valid]
+    ] = True
+
+    new_mask = mask_line & mask_overall  # only keep voxels that are also in the overall mask
 
     return new_mask
 
 
-def validation(cfg):
+def validation(data, pred_grid,cfg):
 
     t0 = datetime.now()
     print("\nCROSS-VALIDATION SCORING")
 
     # from config
-    path_data_gridded = cfg["path_preproc_data_gridded"]
-    path_xval_pred = cfg["path_prediction_xval"]
     inds = np.array(cfg["indicators"])
     ind_cols = cfg["indicator_names"]
     ind_bounds = cfg["indicator_bounds"]
     dir_data = cfg["dir_data"]
     dir_xval = cfg["dir_xval"]
 
-    # read datasets
-    ds_true = read.dataset(path_data_gridded)
-    ds_pred = read.dataset(path_xval_pred)
+    def sample(df, ds):
 
-    # convert to dataframes and drop non-data variables and NaNs
-    df_true = ds_true.to_dataframe().drop(columns=["spatial_ref"]).dropna()
-    df_pred = ds_pred.to_dataframe().drop(columns=["spatial_ref"]).dropna()
+        dx = ds.attrs["cellsize_x"]
+        dy = ds.attrs["cellsize_y"]
 
-    # keep only df_obs with index in df_pred
-    df_true = df_true[df_true.index.isin(df_pred.index)]
+        x0 = ds.x.values[0] - dx / 2
+        y0 = ds.y.values[0] - dy / 2
+
+        ix = ((df["x"].values - x0) // dx).astype(int)
+        iy = ((df["y"].values - y0) // dy).astype(int)
+        il = df["layer"].values - 1  # layer 1..30 -> 0..29
+
+        df_sampled = pd.DataFrame(index=df.index)
+
+        valid = (
+            (ix >= 0) & (ix < ds.sizes["x"]) &
+            (iy >= 0) & (iy < ds.sizes["y"]) &
+            (il >= 0) & (il < ds.sizes["layer"])
+        )
+
+        for var in ds.data_vars:
+            da = ds[var]
+
+            out = np.full(len(df), np.nan, dtype=float)
+
+            if set(da.dims) == {"layer", "y", "x"}:
+                out[valid] = da.values[il[valid], iy[valid], ix[valid]]
+
+            elif set(da.dims) == {"y", "x"}:
+                out[valid] = da.values[iy[valid], ix[valid]]
+
+            df_sampled[var] = out
+
+        return df_sampled
+
+    # predicted indicator probabilities from prediction grid
+    pred = sample(data, pred_grid).dropna()
+
+    # true indicator probabilities from data, only keep rows with xval predition
+    true = data.copy()
+    true = true[true.index.isin(pred.index)]
 
     # calculate median quantiles and convert to class labels
-    df_true["median"] = _postproc_helper.ind_probs_to_quantiles(df_true[ind_cols], inds, ind_bounds, (0.5,))
-    df_true["median class"] = _postproc_helper.class_from_quantile(df_true["median"], inds, ind_bounds)
+    true["median"] = _postproc_helper.ind_probs_to_quantiles(true[ind_cols], inds, ind_bounds, (0.5,))
+    true["median class"] = _postproc_helper.class_from_quantile(true["median"], inds, ind_bounds)
 
-    df_pred["median"] = _postproc_helper.ind_probs_to_quantiles(df_pred[ind_cols], inds, ind_bounds, (0.5,))
-    df_pred["median class"] = _postproc_helper.class_from_quantile(df_pred["median"], inds, ind_bounds)
+    pred["median"] = _postproc_helper.ind_probs_to_quantiles(pred[ind_cols], inds, ind_bounds, (0.5,))
+    pred["median class"] = _postproc_helper.class_from_quantile(pred["median"], inds, ind_bounds)
 
     # calculate RPS (ranked probability score) for each cell, and put in dataframe
     print("...ranked probability score (RPS)")
-    rps = _scoring.rps_from_cdf(df_pred[ind_cols], df_true[ind_cols], normalize=True)
+    rps = _scoring.rps_from_cdf(pred[ind_cols], true[ind_cols], normalize=True)
 
     # summarize RPS overall and per class, and save to csv
-    path = dir_xval / "xval - ranked probability score.csv"
-    _scoring.rps_summary(rps, df_true["median class"], path=path)
+    path = dir_xval / "xval - ranked probability score - by true class.csv"
+    _scoring.rps_summary(rps, true["median class"], path=path)
+
+    # summarize RPS overall and per layer, and save to csv
+    path = dir_xval / "xval - ranked probability score - by layer.csv"
+    _scoring.rps_summary(rps, true["layer"], path=path)
 
     # boxplot of overall RPS
     path = dir_xval / "xval - RPS.png"
-    visualisation.boxplot(df_true.assign(RPS=rps), y="RPS", path=path, showfliers=False)
+    visualisation.boxplot(true.assign(RPS=rps), y="RPS", path=path, showfliers=False)
 
     # boxplot of RPS by true class
     path = dir_xval / "xval - RPS by true class.png"
-    visualisation.boxplot(df_true.assign(RPS=rps), x="median class", y="RPS", path=path, showfliers=False)
+    visualisation.boxplot(true.assign(RPS=rps), x="median class", y="RPS", path=path, showfliers=False)
+
+    # boxplot of RPS by layer
+    path = dir_xval / "xval - RPS by layer.png"
+    visualisation.boxplot(true.assign(RPS=rps), x="layer", y="RPS", path=path, showfliers=False)
 
     # confusion matrix for median class
     print("...confusion matrix")
-    y_true = df_true["median class"]
-    y_pred = df_pred["median class"]
-    labels = df_true["median class"].cat.categories
+    y_true = true["median class"]
+    y_pred = pred["median class"]
+    labels = true["median class"].cat.categories
 
     cms = [
         (confusion_matrix(y_true, y_pred, labels=labels), "counts", "d"),
