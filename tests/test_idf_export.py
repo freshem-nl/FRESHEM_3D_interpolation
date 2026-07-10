@@ -5,10 +5,9 @@ import xarray as xr
 
 import imod
 
-from scripts.idf_export import export_netcdf, var_folder
+from scripts.idf_export import export_layer_coloured, export_voxel_bulk, var_folder
 
 BULK_EXPORT = {
-    "mode": "bulk",
     "filename_template": "idx_{idx:03d}_{var}_NAP_{z}.idf",
     "z_format": ".2f",
     "z_offset": -0.25,
@@ -19,34 +18,7 @@ def test_var_folder():
     assert var_folder("P(rho≤5)") == "P_rho_le_5"
 
 
-def test_export_layer_model(tmp_path):
-    ds = xr.Dataset(
-        coords={"layer": [1, 2], "x": [100.0, 150.0], "y": [200.0, 250.0]},
-        data_vars={
-            "P(rho≤1)": (
-                ("layer", "y", "x"),
-                np.ones((2, 2, 2), dtype=np.float32),
-            ),
-        },
-    )
-    nc_path = tmp_path / "pred.nc"
-    ds.to_netcdf(nc_path)
-
-    dst_dir = tmp_path / "idf"
-    export_netcdf(
-        nc_path,
-        dst_dir,
-        ["P(rho≤1)"],
-        vertical_dim="layer",
-        export_cfg={"mode": "per-layer"},
-    )
-
-    path = dst_dir / "P_rho_le_1" / "idx_000_layer_01.idf"
-    assert path.is_file()
-    assert imod.idf.open(path).shape == (2, 2)
-
-
-def test_export_coloured_3d_model(tmp_path):
+def _layer_dataset(properties):
     top = np.array(
         [
             [[-10.0, -10.0], [-10.0, -10.0]],
@@ -55,6 +27,23 @@ def test_export_coloured_3d_model(tmp_path):
         dtype=np.float32,
     )
     bottom = top - 5.0
+    data_vars = {
+        "top": (("layer", "y", "x"), top),
+        "bottom": (("layer", "y", "x"), bottom),
+    }
+    data_vars.update(
+        {
+            name: (("layer", "y", "x"), values)
+            for name, values in properties.items()
+        }
+    )
+    return xr.Dataset(
+        coords={"layer": [1, 2], "x": [100.0, 150.0], "y": [200.0, 250.0]},
+        data_vars=data_vars,
+    )
+
+
+def test_export_coloured_3d_model(tmp_path):
     prop = np.array(
         [
             [[0.1, 0.2], [0.3, 0.4]],
@@ -62,25 +51,12 @@ def test_export_coloured_3d_model(tmp_path):
         ],
         dtype=np.float32,
     )
-    ds = xr.Dataset(
-        coords={"layer": [1, 2], "x": [100.0, 150.0], "y": [200.0, 250.0]},
-        data_vars={
-            "top": (("layer", "y", "x"), top),
-            "bottom": (("layer", "y", "x"), bottom),
-            "P(rho≤5)": (("layer", "y", "x"), prop),
-        },
-    )
+    ds = _layer_dataset({"P(rho≤5)": prop})
     nc_path = tmp_path / "pred.nc"
     ds.to_netcdf(nc_path)
 
     dst_dir = tmp_path / "idf"
-    export_netcdf(
-        nc_path,
-        dst_dir,
-        [],
-        vertical_dim="layer",
-        export_cfg={"mode": "coloured-3d-model", "property": "P(rho≤5)"},
-    )
+    export_layer_coloured(nc_path, dst_dir, ["P(rho≤5)"])
 
     out_dir = dst_dir / "P_rho_le_5"
     expected = [
@@ -102,34 +78,30 @@ def test_export_coloured_3d_model(tmp_path):
     np.testing.assert_allclose(back.sortby("y").values, prop[0], rtol=1e-5)
 
 
-def test_export_layer_bottom_dis(tmp_path):
-    data = np.array(
+def test_export_coloured_3d_model_multiple_properties(tmp_path):
+    prop5 = np.array(
         [
-            [[1.0, 2.0], [3.0, 4.0]],
-            [[5.0, 6.0], [7.0, 8.0]],
+            [[0.1, 0.2], [0.3, 0.4]],
+            [[0.5, 0.6], [0.7, 0.8]],
         ],
         dtype=np.float32,
     )
-    ds = xr.Dataset(
-        coords={"layer": [1, 2], "x": [100.0, 150.0], "y": [200.0, 250.0]},
-        data_vars={"bottom": (("layer", "y", "x"), data)},
-    )
-    nc_path = tmp_path / "grid.nc"
+    prop1 = prop5 + 0.1
+    ds = _layer_dataset({"P(rho≤5)": prop5, "P(rho≤1)": prop1})
+    nc_path = tmp_path / "pred.nc"
     ds.to_netcdf(nc_path)
 
-    dst_dir = tmp_path / "dis"
-    export_netcdf(
-        nc_path,
-        dst_dir,
-        ["bottom"],
-        vertical_dim="layer",
-        export_cfg={"mode": "per-layer"},
-    )
+    dst_dir = tmp_path / "idf"
+    export_layer_coloured(nc_path, dst_dir, ["P(rho≤5)", "P(rho≤1)"])
 
-    path = dst_dir / "layer_01_B.idf"
-    assert path.is_file()
-    back = imod.idf.open(path)
-    np.testing.assert_allclose(back.sortby("y").values, data[0], rtol=1e-5)
+    for folder, prop in (("P_rho_le_5", prop5), ("P_rho_le_1", prop1)):
+        out_dir = dst_dir / folder
+        fname = f"002_layer01_{folder}.idf"
+        assert (out_dir / fname).is_file()
+        assert (out_dir / "imod_load_order.txt").is_file()
+        back = imod.idf.open(out_dir / fname)
+        np.testing.assert_allclose(back.sortby("y").values, prop[0], rtol=1e-5)
+
 
 def test_export_voxel_model_bulk(tmp_path):
     data = np.arange(8, dtype=np.float32).reshape(2, 2, 2)
@@ -141,11 +113,10 @@ def test_export_voxel_model_bulk(tmp_path):
     ds.to_netcdf(nc_path)
 
     dst_dir = tmp_path / "idf"
-    export_netcdf(
+    export_voxel_bulk(
         nc_path,
         dst_dir,
         ["P(rho≤5)"],
-        vertical_dim="z",
         export_cfg=BULK_EXPORT,
     )
 
@@ -165,11 +136,10 @@ def test_export_uppercase_dims_with_mapping(tmp_path):
     ds.to_netcdf(nc_path)
 
     dst_dir = tmp_path / "idf"
-    export_netcdf(
+    export_voxel_bulk(
         nc_path,
         dst_dir,
         ["P(150)"],
-        vertical_dim="z",
         dim_mapping={"Z": "z", "Y": "y", "X": "x"},
         export_cfg=BULK_EXPORT,
     )

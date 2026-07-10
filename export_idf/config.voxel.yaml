@@ -2,6 +2,8 @@
 # Run: python export_idf/main.py --config config.voxel.yaml
 # UNC paths: use single quotes or forward slashes (not double-quoted "\\server\..." — YAML treats \t as tab)
 
+kind: voxel-bulk
+
 paths:
 
   # nc_file: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_Nextcloud\Team4-Chloride\test_data\interpolation\20260610_ZLN-clipped_nmc250_chloride - geostat - cl - 3D interpolation - small area.nc'
@@ -10,14 +12,12 @@ paths:
   nc_file: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_Nextcloud\Team4-Chloride\test_data\interpolation\20260701_ZLZ-C3-sharp_nmc250_chloride - postproc - cl - 3D interpolation.nc'
   dst_dir: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_Nextcloud\Team4-Chloride\test_data\interpolation\imod\idf_files_cl'
 
-vertical_dim: z
 dim_mapping:
   Z: z
   Y: y
   X: x
 
 export:
-  mode: bulk
   filename_template: "idx_{idx:03d}_{var}_NAP_{z}.idf"
   z_format: ".2f"
   z_offset: -0.25

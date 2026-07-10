@@ -35,16 +35,26 @@ def main(cfg):
 
     nc_path = Path(cfg["paths"]["nc_file"])
     dst_dir = Path(cfg["paths"]["dst_dir"])
+    kind = cfg.get("kind")
 
     print(f"\nexport IDF from {nc_path}...", end=" ")
-    idf_export.export_netcdf(
-        nc_path,
-        dst_dir,
-        cfg["variables"],
-        cfg["vertical_dim"],
-        cfg.get("dim_mapping", {}),
-        cfg.get("export", {}),
-    )
+    if kind == "layer-coloured":
+        idf_export.export_layer_coloured(
+            nc_path,
+            dst_dir,
+            cfg["properties"],
+            cfg.get("layers"),
+        )
+    elif kind == "voxel-bulk":
+        idf_export.export_voxel_bulk(
+            nc_path,
+            dst_dir,
+            cfg["variables"],
+            cfg.get("dim_mapping", {}),
+            cfg.get("export", {}),
+        )
+    else:
+        raise ValueError("Config kind must be 'layer-coloured' or 'voxel-bulk'")
     print(f"done.\n...output in {dst_dir}\n")
 
 
@@ -53,7 +63,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Export NetCDF variables to iMOD IDF files.")
     ap.add_argument(
         "--config",
-        default="config.voxel.yaml",
+        default="config.layer.yaml",
         help="Config file in export_idf/ (config.voxel.yaml or config.layer.yaml)",
     )
     args = ap.parse_args()
