@@ -47,6 +47,9 @@ def ds_ind_probs_to_quantiles(pred, cfg):
         # Assign data only, so template coordinates and their attrs remain untouched
         pred_quant[var] = (da.dims, da.data)
 
+    for var in ("top", "bottom", cfg["doi_name"]):
+        pred_quant[var] = pred[var]
+
     print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
     return pred_quant
