@@ -35,9 +35,9 @@ def main(cfg):
         data = preproc_data.quantiles_and_indicator_probs(data, cfg)
         if method == "ml":
             data = preproc_ml.OGC(data, cfg)
-        ###TEMP
-        cond = (data["x"] > 39700) & (data["x"] < 43900) & (data["y"] > 391400) & (data["y"] < 397600)
-        data = data.loc[cond]
+        # ###TEMP
+        # cond = (data["x"] > 39700) & (data["x"] < 43900) & (data["y"] > 391400) & (data["y"] < 397600)
+        # data = data.loc[cond]
         ### END TEMP
         write.table(data, cfg["path_preproc_data"])
         visualisation.plot_df(data, "preproc - data", cfg)
@@ -115,5 +115,6 @@ def main(cfg):
 
 if __name__ == "__main__":
 
-    cfg = config_loader.load_config(Path(os.getcwd()) / "config.yaml")
-    main(cfg)
+    config_path = Path(os.getcwd()) / "config.yaml"
+    for cfg in config_loader.load_configs(config_path):
+        main(cfg)
