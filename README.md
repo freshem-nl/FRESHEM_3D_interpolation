@@ -9,4 +9,3 @@ Standalone exporter for FRESHEM prediction NetCDF files.
 3. Run `export_idf/main.py`
 
 Output: `dst_dir/{var_folder}/idx_000_{var}_NAP_-50_00.idf` (bulk voxel export, default)
-
