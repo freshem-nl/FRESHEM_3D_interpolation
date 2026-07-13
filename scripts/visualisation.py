@@ -70,19 +70,25 @@ def plot_ds(ds, name, cfg):
 
         for depth, da_plot in plot_items:
 
+            cmap = None
             # log colorscale for quantiles, linear for indicators
             if var in quantile_names:
-                vals = da_plot.values
-                vals = vals[np.isfinite(vals) & (vals > 0)]
-                vmin, vmax = np.quantile(vals, [0.02, 0.98])
-                norm = LogNorm(vmin=vmin, vmax=vmax)
+                lo, hi = cfg["indicator_bounds"]
+                norm = LogNorm(vmin=lo, vmax=hi)
+                if cfg["variable_name"].lower() == "rho":
+                    cmap = "RdYlBu_r"
             elif var in indicator_names:
                 norm = Normalize(vmin=0, vmax=1)
+                if cfg["variable_name"].lower() == "rho":
+                    cmap = "Blues"
             else:
                 norm = None
 
             # plot map
-            da_plot.plot(norm=norm)
+            if cmap is not None:
+                da_plot.plot(norm=norm, cmap=cmap)
+            else:
+                da_plot.plot(norm=norm)
 
             # set title and path based on whether depth is available
             if depth is not None:
