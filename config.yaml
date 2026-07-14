@@ -1,10 +1,13 @@
-name: anisotropy
+name: batch_test
 method: "geostat" # geostat, ml
 
 # paths — set dir_base and dir_input in config.local.yaml (see config.local.yaml.example)
 
-# rho
-data_input: "LCI_Sharp_MOD_inv.xyz"
+data_input:
+  - Zuid_A1_proc_I01_MOD_inv.xyz
+  - Noord_Holland_B1_proc_I01_MOD_inv.xyz
+  # - LCI_Sharp_MOD_inv.xyz
+  # - SCI_Sharp_Best_MOD_inv.xyz
 variable_name: "rho"
 variable_unit: "Ohm.m"
 indicators: [1,2,3,5,10,20,30,50,100]
@@ -43,7 +46,7 @@ features: ['z', 'OGC(7.5°)', 'OGC(22.5°)', 'OGC(37.5°)', 'OGC(52.5°)', 'OGC(
 
 # plotting
 # plotting_depths: [-150, -50, -10, -5, 0.0]
-plotting_depths: [-25,-10,-5]
+plotting_layers: [1,5,15,25]
 histogram_bins: 50
 histogram_sample_size: 25000
 

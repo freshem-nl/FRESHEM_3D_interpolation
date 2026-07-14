@@ -6,102 +6,66 @@ import pandas as pd
 from scripts import _preproc_helper, _utils
 
 
-def drop_below_doi_and_resample_layers_to_z(df, cfg):
+def restructure(data, cfg):
 
     t0 = datetime.now()
+    print("restructure data to one layer per row...", end=" ")
 
     # from config
-    cellsize_z = cfg["cellsize_z"]
-    col_doi = cfg["doi_name"]
     epsg = cfg["epsg"]
 
-    n_layers = 0
-    n_dropped = 0
-
-    dfs = []
-    zs = []
-
-    layer_numbers = [int(x.split("_")[1]) for x in df.columns if x.startswith("rho_") and "std" not in x]
-    print(f"Drop measurements below {col_doi}, resampling layers to voxel centers with cellsize in z: {cellsize_z}")
+    layer_numbers = [int(x.split("_")[1]) for x in data.columns if x.startswith("rho_") and "std" not in x]
+    df_layers = []
     for i in layer_numbers:
-        print(f"\tLayer {i}:", end=" ")
 
-        # get relevant data for this layer
-        cols = ["line_no", "x", "y", "elevation", f"rho_{i}", f"rho_std{i}", f"dep_top_{i}", f"dep_bot_{i}", col_doi]
-        df_layer = df[cols].copy()
+        df_layer = data.copy()
 
         # rename to stable names
-        df_layer = df_layer.rename(columns={f"rho_{i}": "rho", f"rho_std{i}": "rho_std"})
+        df_layer = df_layer.rename(columns={f"rho_{i}": "rho", f"rho_std{i}": "rho_std", f"thk_{i}": "thickness"})
         df_layer["z_top"] = df_layer["elevation"] - df_layer[f"dep_top_{i}"]
-        df_layer["z_bot"] = df_layer["elevation"] - df_layer[f"dep_bot_{i}"]
-        df_layer["z_doi"] = df_layer["elevation"] - df_layer[col_doi]
+        df_layer["z_bottom"] = df_layer["elevation"] - df_layer[f"dep_bot_{i}"]
+        df_layer["z_doi_standard"] = df_layer["elevation"] - df_layer["doi_standard"]
+        df_layer["z_doi_conservative"] = df_layer["elevation"] - df_layer["doi_conservative"]
         df_layer["layer"] = i
 
-        n_layers += len(df_layer)
+        # Drop and reorder columns
+        columns_to_keep = [
+            "line_no",
+            "x",
+            "y",
+            "layer",
+            "rho",
+            "rho_std",
+            "z_top",
+            "z_bottom",
+            "thickness",
+            "z_doi_conservative",
+            "z_doi_standard",
+        ]
+        df_layer = df_layer[columns_to_keep]
 
-        # ---- DOI handling: clip bottoms to DOI, then drop intervals fully below DO
-        n0 = len(df_layer)
-        df_layer["z_bot"] = np.maximum(df_layer["z_bot"], df_layer["z_doi"])
-        df_layer = df_layer[df_layer["z_top"] > df_layer["z_doi"]]
-        n_dropped += n0 - len(df_layer)
-        print(f"{n0 - len(df_layer):,} layers below DOI", end="")
+        # # ---- DOI handling: clip bottoms to DOI, then drop intervals fully below DO
+        # n0 = len(df_layer)
+        # df_layer["z_bot"] = np.maximum(df_layer["z_bot"], df_layer["z_doi"])
+        # df_layer = df_layer[df_layer["z_top"] > df_layer["z_doi"]]
+        # n_dropped += n0 - len(df_layer)
+        # print(f"{n0 - len(df_layer):,} measurements below DOI")
 
-        if df_layer.empty:
-            print(" (no remaining layers)")
-        else:
-
-            z_min = df_layer["z_bot"].min()
-            z_max = df_layer["z_top"].max()
-
-            # Get the z-centers of the grid cells based on the min and max z values and the cell size
-            z_centers = _preproc_helper.min_max_to_cell_centers(z_min, z_max, cellsize_z)
-
-            # Create a 2D boolean mask of shape (n_rows, n_z_centers)
-            # Each row indicates which z_centers fall within [Z_BOT, Z_TOP] of that layer
-            mask = (z_centers >= df_layer["z_bot"].values[:, None]) & (z_centers <= df_layer["z_top"].values[:, None])
-
-            # Count number of voxel centers per row (i.e., how many True values per row)
-            n = mask.sum(axis=1)
-            n_dropped += (n == 0).sum()  # count rows with no matching z-centers
-            print(
-                f", {len(df_layer):,} resampled to {n.sum():,} points ({(n == 0).sum():,} without a voxel center)",
-                end="\n",
-            )
-
-            # drop columns not needed for resampling
-            drop_cols = ["elevation", "z_doi", col_doi, "dep_top_" + str(i), "dep_bot_" + str(i), "z_top", "z_bot"]
-            df_layer = df_layer.drop(columns=drop_cols)
-
-            # Repeat each row n times so that we can assign one z_center per voxel later
-            # Rows with n=0 are automatically dropped (no matching voxels)
-            df_rep = df_layer.loc[df_layer.index.repeat(n)].reset_index(drop=True)
-
-            # Extract the matching z_centers:
-            # np.where(mask) returns (row_indices, col_indices)
-            # We take the column indices → positions in z_centers
-            z_rep = z_centers[np.where(mask)[1]]
-
-            # Collect repeated rows and matching z-centers separately for each layer, to combine later
-            dfs.append(df_rep)
-            zs.append(z_rep)
+        df_layers.append(df_layer)
 
     # Concatenate all repeated rows from all layers into one DataFrame
-    df_z = pd.concat(dfs, ignore_index=True)
+    data_per_layer = pd.concat(df_layers, ignore_index=True)
 
-    # Concatenate all z_center arrays and assign them to the DataFrame
-    # Length matches df_z by construction (1 z_center per repeated row)
-    df_z["z"] = np.concatenate(zs)
-
-    # Reorder columns to have X, Y, Z first
-    df_z = df_z[["x", "y", "z"] + [c for c in df_z.columns if c not in ["x", "y", "z"]]]
+    data_per_layer = data_per_layer.sort_values(["x", "y", "layer"]).reset_index(drop=True)
 
     # Convert to geodataframe
-    df_z = _utils.df_to_gdf(df_z, epsg=epsg)
+    data_per_layer = _utils.df_to_gdf(data_per_layer, epsg=epsg)
 
-    txt = f"...resampled {n_layers:,} layers to {df_z.shape[0]:,} measurements, dropped {n_dropped:,} layers ({(datetime.now() - t0).total_seconds():.2f}s)"
+    # txt = f"...dropped {n_dropped:,} measurements ({(datetime.now() - t0).total_seconds():.2f}s)"
+    txt = f"({(datetime.now() - t0).total_seconds():.2f}s)"
     print(txt)
 
-    return df_z
+    return data_per_layer
 
 
 def quantiles_and_indicator_probs(df, cfg):
@@ -144,9 +108,7 @@ def quantiles_and_indicator_probs(df, cfg):
     if np.any(mask_zero):
         qv[mask_zero, :] = mu[mask_zero, :]
 
-    # --- 4) attach results to uniq
-    # prob_cols = [f"P({i})" for i in inds]
-    # q_cols = [f"Q{int(round(q * 100)):02d}" for q in quantiles]
+    # --- 4) attach results to unique
 
     unique_out = pd.concat(
         [
@@ -247,9 +209,9 @@ def resample_layers_to_z(data, cfg):
 
     # Create expanded dataframe
     out = data.iloc[row_idx].copy()
-    out["Z"] = z_centers[z_idx]
+    out["z"] = z_centers[z_idx]
     out = out.reset_index(drop=True)
 
-    out = out.sort_values(["X", "Y", "Z"], ascending=[True, True, False]).reset_index(drop=True)
+    out = out.sort_values(["x", "y", "z"], ascending=[True, True, False]).reset_index(drop=True)
 
     return out

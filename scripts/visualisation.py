@@ -9,6 +9,7 @@ from matplotlib.collections import PatchCollection
 from matplotlib.colors import BoundaryNorm, ListedColormap, LogNorm, Normalize
 from matplotlib.patches import Ellipse
 from sklearn.metrics import ConfusionMatrixDisplay
+from tqdm.auto import tqdm
 
 
 def plot_df(df, name, cfg):
@@ -18,82 +19,82 @@ def plot_df(df, name, cfg):
     # drop geometry column in case it's a geodataframe
     df = df.drop(columns="geometry", errors="ignore")
 
-    print(f"Plotting histograms for dataframe {df.columns.to_list()}...", end=" ")
-
     # from config
     dir_plot = cfg["dir_plot"]
 
-    # replace "rho" with "ρ" in column names for better plot labels
-    df.columns = [col.replace("rho", "ρ") for col in df.columns]
-
     os.makedirs(dir_plot, exist_ok=True)
-    for var in df.columns:
+
+    txt = f"Plotting histograms for dataframe {df.columns.to_list()}..."
+    for var in tqdm(df.columns, desc=txt, unit="var"):
+
         path = dir_plot / f"{name} - {var}.png"
 
         histogram(df[var], path, cfg)
+
+        if var == cfg["variable_name"]:
+            for layer in df["layer"].unique():
+                path = dir_plot / f"{name} - {var} - layer {layer}.png"
+                histogram(df[df["layer"] == layer][var], path, cfg)
 
     print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
 
 def plot_ds(ds, name, cfg):
     t0 = datetime.now()
-    print(f"plotting dataset {list(ds.data_vars)} at depths {cfg['plotting_depths']}...", end=" ")
 
     # from config
     dir_plot = cfg["dir_plot"]
-    plotting_depths = cfg["plotting_depths"]
     indicator_names = cfg["indicator_names"]
     quantile_names = cfg["quantile_names"]
+    plotting_layers = cfg["plotting_layers"]
 
-    # select target depths (exact match or nearest)
-    depths = ds["z"].sel(z=np.array(plotting_depths), method="nearest").values
+    # print(f"plotting dataset {list(ds.data_vars)} for layers {cfg['plotting_layers']}...", end=" ")
+
+    def get_norm(da, var, indicator_names, quantile_names):
+        if var in quantile_names:
+            vals = da.values
+            vals = vals[np.isfinite(vals) & (vals > 0)]
+            if len(vals) == 0:
+                return None
+            vmin, vmax = np.quantile(vals, [0.02, 0.98])
+            return LogNorm(vmin=vmin, vmax=vmax)
+
+        elif var in indicator_names:
+            return Normalize(vmin=0, vmax=1)
+
+        return None
 
     os.makedirs(dir_plot, exist_ok=True)
 
-    #replace rho with "ρ" for all data vars in ds
-    ds = ds.rename({var: var.replace("rho", "ρ") for var in ds.data_vars})
+    txt = f"plotting dataset {list(ds.data_vars)} for layers {cfg['plotting_layers']}"
+    for var in tqdm(ds.data_vars, desc=txt, unit="var"):
 
-    for var in ds.data_vars:
+        # for var in ds.data_vars:
+        da = ds[var]
 
         # histogram
-        da = ds[var]
         series = da.stack(cell=da.dims).dropna("cell").to_series().rename(var)
-        path = dir_plot / f"{name} - {var} histogram.png"
+        path = dir_plot / f"{name} - {var}.png"
         histogram(series, path, cfg)
 
-        # If the variable has a Z dimension: make one plot per target depth
-        if "z" in da.dims:
-            plot_items = [(depth, da.sel(z=depth)) for depth in depths]
-        # If the variable has no Z dimension: still make one 2D plot
-        else:
-            plot_items = [(None, da)]
+        slices = (
+            [(layer, da.sel(layer=layer)) for layer in plotting_layers if layer in da.layer.values]
+            if "layer" in da.dims
+            else [(None, da)]
+        )
 
-        for depth, da_plot in plot_items:
+        for layer, da_slice in slices:
+            norm = get_norm(da_slice, var, indicator_names, quantile_names)
+            da_slice.plot(norm=norm)
 
-            # log colorscale for quantiles, linear for indicators
-            if var in quantile_names:
-                vals = da_plot.values
-                vals = vals[np.isfinite(vals) & (vals > 0)]
-                vmin, vmax = np.quantile(vals, [0.02, 0.98])
-                norm = LogNorm(vmin=vmin, vmax=vmax)
-            elif var in indicator_names:
-                norm = Normalize(vmin=0, vmax=1)
-            else:
-                norm = None
+            title = f"layer {layer} - {var}" if layer is not None else var
+            filename = f"{name} - layer {layer} - {var}.png" if layer is not None else f"{name} - {var}.png"
 
-            # plot map
-            da_plot.plot(norm=norm)
+            plt.title(title)
 
-            # set title and path based on whether depth is available
-            if depth is not None:
-                plt.title(f"{var} at z={depth}m")
-                path = dir_plot / "depth_slices" / f"{name} - {var} at z={depth}m.png"
-            else:
-                plt.title(var)
-                path = dir_plot / "depth_slices" / f"{name} - {var}.png"
-
-            # save figure
+            path = dir_plot / "grid" / filename
             os.makedirs(path.parent, exist_ok=True)
+
             plt.savefig(path, dpi=300, bbox_inches="tight")
             plt.close()
 
@@ -125,6 +126,7 @@ def histogram(series, path, cfg):
     sample_size = cfg["histogram_sample_size"]
     variable_name = cfg["variable_name"]
     indicator_bounds = cfg["indicator_bounds"]
+    quantile_names = cfg["quantile_names"]
 
     name = series.name
 
@@ -139,7 +141,7 @@ def histogram(series, path, cfg):
 
     plt.figure()
     # check if plotting  main variable or an indicator (starts with "P("), then use log scale for histogram
-    if (name == variable_name) or (name.startswith("Q")):  # log scale for density and quantiles
+    if (name == variable_name) or (name in quantile_names):  # log scale for density and quantiles
         x = df_plot.to_numpy()
         x = x[np.isfinite(x) & (x > 0)]  # log needs positive values
         xmin, xmax = indicator_bounds

@@ -6,30 +6,28 @@ import xarray as xr
 from scripts import _postproc_helper, read, write
 
 
-def ds_ind_probs_to_quantiles(cfg):
+def ds_ind_probs_to_quantiles(pred, cfg):
     t0 = datetime.now()
     print("\nPOSTPROCESSING PREDICTIONS")
     print("calculate quantiles from indicator probabilities...", end=" ")
 
     # from config
-    path_pred = cfg["path_prediction"]
-    path_output = cfg["path_postproc"]
     indicators = cfg["indicators"]
     indicator_names = cfg["indicator_names"]
     quantiles = cfg["quantiles"]
     quantile_names = cfg["quantile_names"]
     bounds = cfg["indicator_bounds"]
 
-    # read predictions
-    ds_ind_probs = read.dataset(path_pred)
+    # create mask indicator variables: True if all indicator probabilities are not null, False otherwise
+    mask_all = xr.concat([pred[v].notnull() for v in indicator_names], dim="v").all("v")
 
+    # stack mask to 1D array for indexing
+    mask1d = mask_all.stack(cell=("layer", "y", "x"))
 
-    mask_all = xr.concat([ds_ind_probs[v].notnull() for v in indicator_names], dim="v").all("v")
+    # create dataframe with indicator probabilities for all cells where mask is True
+    df_ind_probs = pred[indicator_names].stack(cell=("layer", "y", "x")).where(mask1d, drop=True).to_dataframe()
 
-    mask1d = mask_all.stack(cell=("z", "y", "x"))
-
-    df_ind_probs = ds_ind_probs[indicator_names].stack(cell=("z", "y", "x")).where(mask1d, drop=True).to_dataframe()
-
+    # convert indicator probabilities to quantiles
     df_quant = _postproc_helper.ind_probs_to_quantiles(
         df_ind_probs,
         indicators=indicators,
@@ -39,30 +37,22 @@ def ds_ind_probs_to_quantiles(cfg):
     )
 
     # init new dataset with same coords and attrs as original, but no data variables
-    ds_quant = xr.Dataset(coords=ds_ind_probs.coords, attrs=ds_ind_probs.attrs)
+    pred_quant = xr.Dataset(coords=pred.coords, attrs=pred.attrs)
 
 
     # Convert dataframe columns to variables and assign them onto the template dataset
     for var in df_quant.columns:
         # Create a DataArray from the dataframe column, with the same index as the dataset
-        da = df_quant[var].to_xarray().reindex_like(ds_quant)
+        da = df_quant[var].to_xarray().reindex_like(pred_quant)
         # Assign data only, so template coordinates and their attrs remain untouched
-        ds_quant[var] = (da.dims, da.data)
+        pred_quant[var] = (da.dims, da.data)
 
-
-    # # convert quantiles back to xarray Dataset (dims constructed from index-levels)
-    # ds_newvars = xr.Dataset.from_dataframe(df_quant).reindex_like(ds_ind_probs)
-
-    # # add new quantile variables to dataset
-    # for v in ds_newvars:
-    #     ds_quant[v] = ds_newvars[v]
-
-    # save dataset
-    write.dataset(ds_quant, path_output)
+    for var in ("top", "bottom", cfg["doi_name"]):
+        pred_quant[var] = pred[var]
 
     print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
-    return ds_quant
+    return pred_quant
 
 def ensure_monotonicity(ds, cfg):
 
