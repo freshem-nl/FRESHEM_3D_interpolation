@@ -1,0 +1,22 @@
+# 2D layer model -> IDF for iMOD Coloured 3-D Model visualization
+# Run: python export_idf/main.py --config config.layer.yaml
+# Load order per layer: top, property, bottom (see imod_load_order.txt in output)
+
+kind: layer-coloured
+
+paths:
+  # nc_file: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_Nextcloud\Team4-Chloride\test_data\interpolation\20260630_SCI_Sharp_Best_MOD_inv - geostat - rho - layer model - area C3.nc'
+  
+  # nc_file: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_local\Interpolation\output\20260710 - geostat - rho - batch_test - Zuid_A1_proc_I01_MOD_inv\data\Zuid_A1_proc_I01_MOD_inv - postproc.nc'
+  nc_file: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_local\Interpolation\output\20260710 - geostat - rho - batch_test - Zuid_A1_proc_I01_MOD_inv\data\Zuid_A1_proc_I01_MOD_inv - geostat - rho.nc'
+  dst_dir: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_local\Interpolation\idfs\Zuid_A1_proc_I01_MOD_inv'
+
+properties:
+  - "P(rho≤5)"
+  - "P(rho≤50)"
+  - "P(rho≤100)"
+  # - "Q(0.1)"
+  # - "Q(0.5)"
+  # - "Q(0.9)"
+
+# layers: [1, 2, 3]  # optional subset for quick iMOD test
