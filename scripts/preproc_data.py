@@ -209,9 +209,9 @@ def resample_layers_to_z(data, cfg):
 
     # Create expanded dataframe
     out = data.iloc[row_idx].copy()
-    out["Z"] = z_centers[z_idx]
+    out["z"] = z_centers[z_idx]
     out = out.reset_index(drop=True)
 
-    out = out.sort_values(["X", "Y", "Z"], ascending=[True, True, False]).reset_index(drop=True)
+    out = out.sort_values(["x", "y", "z"], ascending=[True, True, False]).reset_index(drop=True)
 
     return out

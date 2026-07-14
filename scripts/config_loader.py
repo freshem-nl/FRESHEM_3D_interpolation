@@ -4,7 +4,7 @@ from pathlib import Path
 import yaml
 
 
-def load_config(path="config.yaml"):
+def load_config(path="config.yaml", data_input=None):
 
     path = Path(path)
     print(f"\nloading config from {path}")
@@ -17,6 +17,12 @@ def load_config(path="config.yaml"):
         with open(local_path, "r", encoding="utf-8") as f:
             local_cfg = yaml.safe_load(f) or {}
         cfg.update(local_cfg)
+
+    if data_input is not None:
+        cfg["data_input"] = data_input
+        cfg["name"] = f'{cfg["name"]} - {Path(data_input).stem}'
+    elif isinstance(cfg.get("data_input"), list):
+        raise ValueError("data_input is a list; use load_configs()")
 
     if not cfg.get("dir_base") or not cfg.get("dir_input"):
         raise FileNotFoundError(
@@ -53,5 +59,13 @@ def load_config(path="config.yaml"):
     cfg["path_prediction_xval"] = cfg["dir_data"] / f"{input_name} - xval.nc"
     cfg["path_postproc"] = cfg["dir_data"] / f"{input_name} - postproc.nc"
     cfg["path_data_anisotropy"] = cfg["dir_data"] / f"{input_name} - preproc - data - anisotropy.nc"
-    
+
     return cfg
+
+
+def load_configs(path="config.yaml"):
+    path = Path(path)
+    with open(path, encoding="utf-8") as f:
+        data_inputs = yaml.safe_load(f)["data_input"]
+
+    return [load_config(path, data_input) for data_input in data_inputs]
