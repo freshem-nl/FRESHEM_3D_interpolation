@@ -1,0 +1,15 @@
+# SkyTEM rho xyz -> GeoPackage (QGIS elevation profile inspection)
+# Run: python export_gpkg/main.py --config config.rho.yaml
+# UNC paths: use single quotes or forward slashes
+
+paths:
+  xyz_file: '//tsn.tno.nl/RA-Data/Express/Datachris/Projecten/FreshEM_local/Interpolation/20260715_Noord_F_Noord_B2/Noord_F_proc_I02_doi_325m_MOD_inv.xyz'
+  gpkg_file: '//tsn.tno.nl/RA-Data/Express/Datachris/Projecten/FreshEM_local/Interpolation/20260715_Noord_F_Noord_B2/Noord_F_proc_I02_doi_325m_MOD_inv.gpkg'
+
+epsg: 28992
+include_flightlines: true
+points_layer: rho_points
+flightlines_layer: flightlines
+
+# Optional XY clip: [xmin, xmax, ymin, ymax]. Omit or leave empty for full extent.
+clip_bbox: [220000,222000, 570000,580000]
