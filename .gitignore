@@ -68,3 +68,5 @@ config.local.yaml
 Thumbs.db
 
 __pycache__/
+anisotropy.ipynb
+anisotropy2.ipynb

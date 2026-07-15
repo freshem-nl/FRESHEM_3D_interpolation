@@ -5,6 +5,7 @@ from pathlib import Path
 from tqdm.auto import tqdm
 
 from scripts import (
+    anisotropy,
     config_loader,
     depth,
     geostat,
@@ -36,10 +37,11 @@ def main(cfg):
         if method == "ml":
             data = preproc_ml.OGC(data, cfg)
         ###TEMP
-        cond = (data["x"] > 39700) & (data["x"] < 43900) & (data["y"] > 391400) & (data["y"] < 397600)
-        data = data.loc[cond]
+        # cond = (data["x"] > 39700) & (data["x"] < 43900) & (data["y"] > 391400) & (data["y"] < 397600)
+        # data = data.loc[cond]
         ### END TEMP
         write.table(data, cfg["path_preproc_data"])
+        write.table(data, cfg["path_preproc_data"].with_suffix(".csv"))
         visualisation.plot_df(data, "preproc - data", cfg)
 
     def preprocessing_prediction_grid():
@@ -52,8 +54,10 @@ def main(cfg):
         if method == "ml":
             pred = preproc_ml.OGC(pred, cfg)
         if method == "geostat":
-            # interpoleer data_aniso parameters naar relevante ellips parameters (hoek, ratio) in pred
-            pass
+            pred = anisotropy.anisotropy_of_observations(data, pred, cfg)
+            visualisation.plot_laf(pred, cfg, suffix="_obs", step=1, ellipse_scale=5.0)
+            pred = anisotropy.interpolate_to_laf(pred, cfg)
+            visualisation.plot_laf(pred, cfg)
         write.dataset(pred, cfg["path_preproc_prediction_grid"])
         visualisation.plot_ds(pred, "preproc - prediction grid", cfg)
 
@@ -100,14 +104,14 @@ def main(cfg):
     def xval_scoring():
         data = read.table(cfg["path_preproc_data"])
         pred_xval = read.dataset(cfg["path_prediction_xval"])
-        xval.validation(data, pred_xval,cfg)
+        xval.validation(data, pred_xval, cfg)
 
     preprocessing_data()
     preprocessing_prediction_grid()
-    interpolation()
-    postprocessing()
-    interpolation_xval()
-    xval_scoring()
+    # interpolation()
+    # postprocessing()
+    # interpolation_xval()
+    # xval_scoring()
 
     # total runtime
     print(f"\nTotal runtime: {(datetime.now() - t)}.\n\n")

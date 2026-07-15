@@ -1,4 +1,4 @@
-name: test4
+name: test
 method: "geostat" # geostat, ml
 
 # paths — set dir_base and dir_input in config.local.yaml (see config.local.yaml.example)
@@ -29,6 +29,7 @@ xval_n_lines: 10
 
 #geostat variables
 variogram_model_range_xy: 1000.0
+variogram_minor_range_xy_min: 100.0
 variogram_model_range_z: 2.01
 neighbourhood_dist_xy: 1000.0
 neighbourhood_dist_z: 0.99
@@ -43,14 +44,15 @@ features: ['z', 'OGC(7.5°)', 'OGC(22.5°)', 'OGC(37.5°)', 'OGC(52.5°)', 'OGC(
 
 # plotting
 # plotting_depths: [-150, -50, -10, -5, 0.0]
-plotting_layers: [1,5,15,25]
+plotting_layers: [1,7,15,25]
 histogram_bins: 50
 histogram_sample_size: 25000
 
 # anisotropy
 aniso_indicator: 5
-aniso_indicator_z_range: 3.0
-aniso_long_axis_min: 500.0
-aniso_long_axis_max: 10000.0
-aniso_short_axis_max: 1000.0
-aniso_long_short_angle_min_diff: 30.0
+aniso_pca_radius: 1000
+aniso_pca_nmin: 20
+aniso_pca_eig_ratio_min: 2.0
+aniso_pca_sampling_eig_min: 2.0
+aniso_pca_angle_diff_max: 15.0
+aniso_idw_k: 16
