@@ -86,43 +86,64 @@ def validation(data, pred_grid,cfg):
     dir_data = cfg["dir_data"]
     dir_xval = cfg["dir_xval"]
 
-    def sample(df, ds):
-
-        dx = ds.attrs["cellsize_x"]
-        dy = ds.attrs["cellsize_y"]
-
-        x0 = ds.x.values[0] - dx / 2
-        y0 = ds.y.values[0] - dy / 2
-
-        ix = ((df["x"].values - x0) // dx).astype(int)
-        iy = ((df["y"].values - y0) // dy).astype(int)
-        il = df["layer"].values - 1  # layer 1..30 -> 0..29
+    def sample(df, ds, ind_cols):
 
         df_sampled = pd.DataFrame(index=df.index)
 
-        valid = (
-            (ix >= 0) & (ix < ds.sizes["x"]) &
-            (iy >= 0) & (iy < ds.sizes["y"]) &
-            (il >= 0) & (il < ds.sizes["layer"])
-        )
+        x = xr.DataArray(df["x"].values, dims="p")
+        y = xr.DataArray(df["y"].values, dims="p")
+        layer = xr.DataArray(df["layer"].values, dims="p")
 
-        for var in ds.data_vars:
+        for var in ind_cols:
+
             da = ds[var]
 
-            out = np.full(len(df), np.nan, dtype=float)
-
-            if set(da.dims) == {"layer", "y", "x"}:
-                out[valid] = da.values[il[valid], iy[valid], ix[valid]]
-
-            elif set(da.dims) == {"y", "x"}:
-                out[valid] = da.values[iy[valid], ix[valid]]
-
-            df_sampled[var] = out
+            # sample the data at the specified coordinates
+            df_sampled[var] = (
+                da.sel(layer=layer)
+                .sel(x=x, y=y, method="nearest")
+                .values
+            )
 
         return df_sampled
 
+    # def sample(df, ds):
+
+    #     dx = ds.attrs["cellsize_x"]
+    #     dy = ds.attrs["cellsize_y"]
+
+    #     x0 = ds.x.values[0] - dx / 2
+    #     y0 = ds.y.values[0] - dy / 2
+
+    #     ix = ((df["x"].values - x0) // dx).astype(int)
+    #     iy = ((df["y"].values - y0) // dy).astype(int)
+    #     il = df["layer"].values - 1  # layer 1..30 -> 0..29
+
+    #     df_sampled = pd.DataFrame(index=df.index)
+
+    #     valid = (
+    #         (ix >= 0) & (ix < ds.sizes["x"]) &
+    #         (iy >= 0) & (iy < ds.sizes["y"]) &
+    #         (il >= 0) & (il < ds.sizes["layer"])
+    #     )
+
+    #     for var in ds.data_vars:
+    #         da = ds[var]
+
+    #         out = np.full(len(df), np.nan, dtype=float)
+
+    #         if set(da.dims) == {"layer", "y", "x"}:
+    #             out[valid] = da.values[il[valid], iy[valid], ix[valid]]
+
+    #         elif set(da.dims) == {"y", "x"}:
+    #             out[valid] = da.values[iy[valid], ix[valid]]
+
+    #         df_sampled[var] = out
+
+    #     return df_sampled
+
     # predicted indicator probabilities from prediction grid
-    pred = sample(data, pred_grid).dropna()
+    pred = sample(data, pred_grid, ind_cols).dropna()
 
     # true indicator probabilities from data, only keep rows with xval predition
     true = data.copy()
