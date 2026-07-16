@@ -2,7 +2,7 @@
 
 import geopandas as gpd
 
-from scripts.gpkg_export import clip_bbox, export_rho_xyz, flightlines_from_xyz
+from scripts.gpkg_export import clip_bbox, clip_doi, export_rho_xyz, flightlines_from_xyz
 from scripts.read import parse_skytem_xyz
 
 
@@ -12,6 +12,11 @@ XYZ_SAMPLE = """\
 1 150.0 250.0 5.0 20.0 2.0 5.0 15.0 10.0 50.0 40.0
 2 300.0 400.0 4.0 30.0 3.0 0.0 8.0 8.0 45.0 35.0
 2 350.0 450.0 4.0 35.0 3.5 8.0 18.0 10.0 45.0 35.0
+"""
+
+XYZ_DOI_SAMPLE = """\
+/ LINE_NO X Y ELEVATION RHO_1 RHO_STD1 DEP_TOP_1 DEP_BOT_1 THK_1 RHO_2 RHO_STD2 DEP_TOP_2 DEP_BOT_2 THK_2 DOI_STANDARD DOI_CONSERVATIVE
+1 100.0 200.0 5.0 10.5 1.2 0.0 5.0 5.0 8.0 1.0 5.0 15.0 10.0 4.0 3.0
 """
 
 
@@ -56,6 +61,24 @@ def test_export_rho_xyz(tmp_path):
     assert len(lines) == 2
 
 
+def test_clip_doi():
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "z_top": [5.0, 0.0, -2.0],
+            "z_bottom": [0.0, -10.0, -5.0],
+            "z_doi_standard": [1.0, 1.0, 1.0],
+        }
+    )
+
+    clipped = clip_doi(df)
+
+    assert len(clipped) == 1
+    assert clipped.iloc[0]["z_top"] == 5.0
+    assert clipped.iloc[0]["z_bottom"] == 1.0
+
+
 def test_clip_bbox(tmp_path):
     xyz_path = tmp_path / "sample.xyz"
     _write_sample_xyz(xyz_path)
@@ -81,3 +104,28 @@ def test_export_rho_xyz_with_bbox(tmp_path):
     assert len(points) == 2
     assert set(points["line_no"]) == {2}
     assert len(lines) == 1
+
+
+def test_export_rho_xyz_with_doi_clip(tmp_path):
+    xyz_path = tmp_path / "sample_doi.xyz"
+    gpkg_path = tmp_path / "sample_doi.gpkg"
+    xyz_path.write_text(XYZ_DOI_SAMPLE, encoding="utf-8")
+
+    export_rho_xyz(xyz_path, gpkg_path, epsg=28992, apply_doi_clip=True, include_flightlines=False)
+
+    points = gpd.read_file(gpkg_path, layer="rho_points")
+
+    assert len(points) == 1
+    assert points.iloc[0]["layer"] == 1
+
+
+def test_export_rho_xyz_without_doi_clip(tmp_path):
+    xyz_path = tmp_path / "sample_doi.xyz"
+    gpkg_path = tmp_path / "sample_doi_full.gpkg"
+    xyz_path.write_text(XYZ_DOI_SAMPLE, encoding="utf-8")
+
+    export_rho_xyz(xyz_path, gpkg_path, epsg=28992, apply_doi_clip=False, include_flightlines=False)
+
+    points = gpd.read_file(gpkg_path, layer="rho_points")
+
+    assert len(points) == 2

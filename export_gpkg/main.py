@@ -45,6 +45,8 @@ def main(cfg):
         points_layer=cfg.get("points_layer", "rho_points"),
         flightlines_layer=cfg.get("flightlines_layer", "flightlines"),
         bbox=cfg.get("clip_bbox") or None,
+        apply_doi_clip=cfg.get("apply_doi_clip", True),
+        doi_name=cfg.get("doi_name", "doi_standard"),
     )
     print(f"done.\n...output in {gpkg_path}\n")
 

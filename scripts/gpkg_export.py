@@ -1,10 +1,26 @@
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 from shapely.geometry import LineString
 
 from scripts import preproc_data, read
+
+
+def z_doi_column(doi_name: str) -> str:
+    return doi_name if doi_name.startswith("z_") else f"z_{doi_name}"
+
+
+def clip_doi(df: pd.DataFrame, doi_name: str = "doi_standard") -> pd.DataFrame:
+    """Drop layers below DOI and clip layer bottoms to the DOI surface."""
+    z_doi = z_doi_column(doi_name)
+    if z_doi not in df.columns:
+        raise ValueError(f"Column {z_doi!r} not found; expected doi field from restructure().")
+
+    out = df.loc[df["z_top"] > df[z_doi]].copy()
+    out["z_bottom"] = np.maximum(out["z_bottom"], out[z_doi])
+    return out.reset_index(drop=True)
 
 
 def clip_bbox(df: pd.DataFrame, bbox) -> pd.DataFrame:
@@ -29,6 +45,8 @@ def flightlines_from_xyz(df: pd.DataFrame, epsg: int) -> gpd.GeoDataFrame:
                 "geometry": LineString(zip(group["x"], group["y"])),
             }
         )
+    if not rows:
+        return gpd.GeoDataFrame(columns=["line_no", "geometry"], crs=f"EPSG:{epsg}")
     return gpd.GeoDataFrame(rows, crs=f"EPSG:{epsg}")
 
 
@@ -41,6 +59,8 @@ def export_rho_xyz(
     points_layer="rho_points",
     flightlines_layer="flightlines",
     bbox=None,
+    apply_doi_clip=True,
+    doi_name="doi_standard",
 ):
     """Parse a SkyTEM rho xyz file and write point + optional flightline layers to GeoPackage."""
     xyz_path = Path(xyz_path)
@@ -59,6 +79,11 @@ def export_rho_xyz(
         print(f"clip bbox {bbox}: {n_before:,} -> {len(df):,} rows")
 
     gdf_points = preproc_data.restructure(df, {"epsg": epsg})
+
+    if apply_doi_clip:
+        n_before = len(gdf_points)
+        gdf_points = clip_doi(gdf_points, doi_name)
+        print(f"clip DOI ({doi_name}): {n_before:,} -> {len(gdf_points):,} rows")
 
     gpkg_path.parent.mkdir(parents=True, exist_ok=True)
     if gpkg_path.exists():

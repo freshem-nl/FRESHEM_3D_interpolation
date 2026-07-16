@@ -13,3 +13,7 @@ flightlines_layer: flightlines
 
 # Optional XY clip: [xmin, xmax, ymin, ymax]. Omit or leave empty for full extent.
 clip_bbox: [220000,222000, 570000,580000]
+
+# Clip layers below depth of investigation (matches main pipeline grid logic).
+apply_doi_clip: true
+doi_name: doi_standard
