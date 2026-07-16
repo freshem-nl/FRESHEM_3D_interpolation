@@ -36,3 +36,6 @@ dependencies = [
 
 [tool.uv.sources]
 isatis = { path = "isatis-1.5.0-cp311-cp311-win_amd64.whl" }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
