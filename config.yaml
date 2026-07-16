@@ -1,4 +1,4 @@
-name: test
+name: test_C3_aniso
 method: "geostat" # geostat, ml
 
 # paths — set dir_base and dir_input in config.local.yaml (see config.local.yaml.example)
@@ -25,9 +25,10 @@ cellsize_xy: 50
 cellsize_z: 0.5
 buffer_xy: 300
 buffer_z: 3
-xval_n_lines: 10
+xval_n_lines: 25
 
 #geostat variables
+use_anisotropy: True
 variogram_model_range_xy: 1000.0
 variogram_minor_range_xy_min: 100.0
 variogram_model_range_z: 2.01
@@ -46,7 +47,7 @@ features: ['z', 'OGC(7.5°)', 'OGC(22.5°)', 'OGC(37.5°)', 'OGC(52.5°)', 'OGC(
 # plotting_depths: [-150, -50, -10, -5, 0.0]
 plotting_layers: [1,7,15,25]
 histogram_bins: 50
-histogram_sample_size: 25000
+histogram_sample_size: 10000
 
 # anisotropy
 aniso_indicator: 5
