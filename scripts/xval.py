@@ -38,9 +38,11 @@ def xval_lines(data, cfg):
     return selected_lines
 
 
-def mask_line(data, mask_overall, line_no):
+def mask_line(data, mask_overall, lines):
 
-    data_line = data.loc[data["line_no"] == line_no, ["x", "y", "layer"]]
+    lines = np.atleast_1d(lines)
+
+    data_line = data.loc[data["line_no"].isin(lines), ["x", "y", "layer"]]
 
     mask_line = xr.zeros_like(mask_overall, dtype=bool)
 
@@ -114,10 +116,9 @@ def validation(data, pred_grid, cfg):
     pred["median"] = _postproc_helper.ind_probs_to_quantiles(pred[ind_cols], inds, ind_bounds, (0.5,))
     pred["median class"] = _postproc_helper.class_from_quantile(pred["median"], inds, ind_bounds)
 
-
     # create plots of performance by median class
     path = dir_xval / "xval - performance by true median class.png"
-    visualisation.class_performance(true=true, pred=pred, group_col="median class", group_source="pred", path=path)
+    visualisation.class_performance(true=true, pred=pred, group_col="median class", group_source="true", path=path)
 
     # calculate RPS (ranked probability score) for each cell, and put in dataframe
     print("...ranked probability score (RPS)")
@@ -150,7 +151,7 @@ def validation(data, pred_grid, cfg):
         labels = [f"{b:.1f}-{b+0.1:.1f}" for b in bins[:-1]]
 
         pred["laf_ratio"] = pd.cut(pred["laf_ratio"], bins=bins, labels=labels, include_lowest=True)
-        true['LAF ratio'] = pred['laf_ratio']
+        true["LAF ratio"] = pred["laf_ratio"]
 
         # plot of performance by LAF ratio class
         path = dir_xval / "xval - performance by LAF ratio.png"

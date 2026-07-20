@@ -39,7 +39,7 @@ def plot_df(df, name, cfg):
     print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
 
-def plot_ds(ds, name, cfg):
+def plot_ds(ds, name, cfg, do_not_plot=None):
     t0 = datetime.now()
 
     # from config
@@ -48,7 +48,6 @@ def plot_ds(ds, name, cfg):
     quantile_names = cfg["quantile_names"]
     plotting_layers = cfg["plotting_layers"]
 
-    # print(f"plotting dataset {list(ds.data_vars)} for layers {cfg['plotting_layers']}...", end=" ")
 
     def get_norm(da, var, indicator_names, quantile_names):
         if var in quantile_names:
@@ -64,9 +63,14 @@ def plot_ds(ds, name, cfg):
 
         return None
 
+    # remove variables that should not be plotted
+    if do_not_plot is not None:
+        ds = ds.drop_vars(do_not_plot, errors="ignore")
+
     os.makedirs(dir_plot, exist_ok=True)
 
     txt = f"plotting dataset {list(ds.data_vars)} for layers {cfg['plotting_layers']}"
+   
     for var in tqdm(ds.data_vars, desc=txt, unit="var"):
 
         # for var in ds.data_vars:
@@ -513,3 +517,40 @@ def class_performance(
         fig.savefig(path, dpi=300, bbox_inches="tight")
         stats.to_csv(path.with_suffix(".csv"), index=False)
     plt.close(fig)
+
+
+def feature_importance(model, cfg):
+
+    # from config
+    dir_plot = cfg["dir_plot"]
+
+    path = dir_plot / "prediction - feature importance.png"
+
+    imp = pd.DataFrame(
+        {
+            "feature": cfg["features"],
+            "importance": model.feature_importances_,
+        }
+    ).sort_values("importance", ascending=True)
+
+    imp.to_csv(path.with_suffix(".csv"), index=False)
+
+    fig, ax = plt.subplots(figsize=(8, max(4, len(imp) * 0.3)))
+
+    sns.barplot(
+        data=imp,
+        x="importance",
+        y="feature",
+        color="steelblue",
+        ax=ax,
+    )
+
+    ax.set_title("Feature importance")
+    ax.set_xlabel("Importance")
+    ax.set_ylabel("")
+
+    plt.tight_layout()
+    plt.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    return fig, ax, imp

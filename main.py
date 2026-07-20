@@ -36,7 +36,7 @@ def main(cfg):
         data = preproc_data.quantiles_and_indicator_probs(data, cfg)
         if method == "ml":
             data = preproc_ml.OGC(data, cfg)
-        ###TEMP
+        ### TEMP SELECT DATA FOR SMALL TEST AREA
         # cond = (data["x"] > 39700) & (data["x"] < 43900) & (data["y"] > 391400) & (data["y"] < 397600)
         # data = data.loc[cond]
         ### END TEMP
@@ -64,15 +64,17 @@ def main(cfg):
     def interpolation():
         data = read.table(cfg["path_preproc_data"])
         pred = read.dataset(cfg["path_preproc_prediction_grid"])
+        existing_vars = set(pred.data_vars)
         if method == "ml":
-            model, output_names = ml.rf_train(data, cfg)
-            pred = ml.rf_predict(model, output_names, pred, cfg)
+            model = ml.rf_train(data, cfg)
+            visualisation.feature_importance(model, cfg)
+            pred = ml.rf_predict(model, pred, cfg)
         elif method == "geostat":
             pred = geostat.kriging(data, pred, cfg)
         pred = postproc.ensure_monotonicity(pred, cfg)
         write.dataset(pred, cfg["path_prediction"])
         write.ds_to_tiff(pred, cfg["dir_rasters"], "pred")
-        visualisation.plot_ds(pred, "prediction", cfg)
+        visualisation.plot_ds(pred, "prediction", cfg, do_not_plot=existing_vars)
 
     def postprocessing():
         pred = read.dataset(cfg["path_prediction"])
@@ -84,22 +86,26 @@ def main(cfg):
     def interpolation_xval():
         data = read.table(cfg["path_preproc_data"])
         pred = read.dataset(cfg["path_preproc_prediction_grid"])
-
+        existing_vars = set(pred.data_vars)
         lines = xval.xval_lines(data, cfg)
         model_mask = pred["mask"].copy()  # overall mask for reuse
-        txt = "crossvalidation: train without data of line, predict on line"
-        for line in tqdm(lines, desc=txt, unit="line", leave=True, position=0):
-            data_fold = data[data["line_no"] != line].copy()  # exclude data from line
-            pred["mask"] = xval.mask_line(data, model_mask, line)  # only voxels in model_mask and line
-            if method == "ml":
-                model = ml.rf_train(data_fold, cfg, verbose=False)
-                pred = ml.rf_predict(model, pred, cfg, verbose=False)
-            elif method == "geostat":
+        if method == "ml":
+            # random forest: train model on data excluding all xval lines, predict on all xval lines simultaneously
+            data_fold = data[~data["line_no"].isin(lines)].copy()  # exclude data from lines
+            pred["mask"] = xval.mask_line(data, model_mask, lines)  # only voxels in model_mask and lines
+            model = ml.rf_train(data_fold, cfg)
+            pred = ml.rf_predict(model, pred, cfg)
+        elif method == "geostat":
+            # geostat: predict on each line separately, excluding data from that line
+            txt = "crossvalidation: without data of line, predict voxels on line"
+            for line in tqdm(lines, desc=txt, unit="line", leave=True, position=0):
+                data_fold = data[data["line_no"] != line].copy()  # exclude data from line
+                pred["mask"] = xval.mask_line(data, model_mask, line)  # only voxels in model_mask and line
                 pred = geostat.kriging(data_fold, pred, cfg, verbose=False)
         pred = postproc.ensure_monotonicity(pred, cfg)
         write.dataset(pred, cfg["path_prediction_xval"])
         write.ds_to_tiff(pred, cfg["dir_rasters"], "xval")
-        visualisation.plot_ds(pred, "xval", cfg)
+        visualisation.plot_ds(pred, "xval", cfg, do_not_plot=existing_vars)
 
     def xval_scoring():
         data = read.table(cfg["path_preproc_data"])

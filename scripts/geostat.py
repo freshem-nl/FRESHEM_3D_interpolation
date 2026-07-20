@@ -26,7 +26,6 @@ def kriging(data, pred, cfg, verbose=True):
     indicator_names = cfg["indicator_names"]
     range_xy = cfg["variogram_model_range_xy"]
     neigh_dist_xy = cfg["neighbourhood_dist_xy"]
-    neigh_dist_z = cfg["neighbourhood_dist_z"]
     neigh_n_sectors = cfg["neighbourhood_n_sectors"]
     neigh_max_neigh_per_sector = cfg["neighbourhood_max_neigh_per_sector"]
     use_anisotropy = cfg["use_anisotropy"]
@@ -94,7 +93,7 @@ def kriging(data, pred, cfg, verbose=True):
         neigh = isa.Neigh(
             n_sectors=neigh_n_sectors,
             max_neigh_per_sector=neigh_max_neigh_per_sector,
-            ellipsoid_size=[neigh_dist_xy, neigh_dist_xy, neigh_dist_z],
+            ellipsoid_size=[neigh_dist_xy, neigh_dist_xy],
         )
 
         # Create Local Geostatistics Set structure
