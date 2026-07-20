@@ -1,4 +1,3 @@
-from fileinput import filename
 import os
 from datetime import datetime
 
@@ -285,7 +284,7 @@ def plot_laf(
     suffix="",
 ):
 
-    #from config
+    # from config
     plotting_layers = cfg["plotting_layers"]
     indicators = cfg["indicators"]
     indicator_names = cfg["indicator_names"]
@@ -295,9 +294,9 @@ def plot_laf(
     # variable to use for anisotropy estimation
     var = indicator_names[indicators.index(aniso_indicator)]
 
-    p_var=f"{var}_obs"
-    angle_var=f"laf_major_angle{suffix}"
-    ratio_var=f"laf_ratio{suffix}"
+    p_var = f"{var}_obs"
+    angle_var = f"laf_major_angle{suffix}"
+    ratio_var = f"laf_ratio{suffix}"
 
     x = ds.x.values
     y = ds.y.values
@@ -367,7 +366,7 @@ def plot_laf(
             ax.set_ylim(ymin, ymax)
 
         plt.tight_layout()
-        if suffix =="":
+        if suffix == "":
             filename = f"anisotropy - layer_{layer}.png"
         else:
             filename = f"anisotropy - layer_{layer} - {suffix.replace('_', '')}.png"
@@ -375,3 +374,142 @@ def plot_laf(
         os.makedirs(path.parent, exist_ok=True)
         plt.savefig(path, dpi=300)
         plt.close()
+
+
+import pandas as pd
+
+
+def class_performance(
+    true,
+    pred,
+    group_col,
+    true_class_col="median class",
+    pred_class_col="median class",
+    group_source="pred",
+    include_within_1=True,
+    title=None,
+    path=None,
+    figsize=(9, 6),
+):
+    """
+    Plot classification performance per existing category/group.
+
+    Parameters
+    ----------
+    true, pred : pandas.DataFrame
+        Dataframes with true and predicted class labels.
+    group_col : str
+        Existing categorical/group column, e.g. 'laf_ratio_class' or 'median class'.
+    true_class_col, pred_class_col : str
+        Columns with true and predicted classes.
+    group_source : {'true', 'pred'}
+        Dataframe from which group_col is taken.
+    include_within_1 : bool
+        Also plot fraction of predictions within +/- 1 class.
+    title : str, optional
+        Plot title.
+    path : pathlib.Path or str, optional
+        If given, save figure to this path.
+
+    Returns
+    -------
+    stats : pandas.DataFrame
+        Performance statistics per group.
+    fig : matplotlib.figure.Figure
+        Figure object.
+    """
+
+    y_true = true[true_class_col]
+    y_pred = pred[pred_class_col]
+
+    if isinstance(y_true.dtype, pd.CategoricalDtype):
+        categories = y_true.cat.categories
+        y_true_code = y_true.cat.codes
+        y_pred_code = y_pred.astype(pd.CategoricalDtype(categories=categories, ordered=True)).cat.codes
+    else:
+        y_true_code = y_true
+        y_pred_code = y_pred
+
+    group = true[group_col] if group_source == "true" else pred[group_col]
+
+    df = pd.DataFrame(
+        {
+            "group": group,
+            "true": y_true_code,
+            "pred": y_pred_code,
+        }
+    ).dropna()
+
+    df["abs_error"] = np.abs(df["true"] - df["pred"])
+    df["correct"] = df["true"] == df["pred"]
+    df["within_1"] = df["abs_error"] <= 1
+
+    stats = (
+        df.groupby("group", observed=True, sort=True)
+        .agg(
+            n=("correct", "size"),
+            mae=("abs_error", "mean"),
+            accuracy=("correct", "mean"),
+            within_1=("within_1", "mean"),
+        )
+        .reset_index()
+    )
+
+    stats["group_label"] = stats["group"].astype(str)
+
+    metrics = ["mae", "accuracy"]
+    if include_within_1:
+        metrics.append("within_1")
+
+    stats_long = stats.melt(
+        id_vars=["group", "group_label", "n"],
+        value_vars=metrics,
+        var_name="metric",
+        value_name="value",
+    )
+
+    fig, (ax1, ax2) = plt.subplots(
+        2,
+        1,
+        figsize=figsize,
+        sharex=True,
+        gridspec_kw={"height_ratios": [3, 1]},
+    )
+
+    sns.lineplot(
+        data=stats_long,
+        x="group_label",
+        y="value",
+        hue="metric",
+        marker="o",
+        ax=ax1,
+    )
+
+    ax1.set_ylabel("Performance")
+    ax1.set_xlabel("")
+    ax1.grid(axis="y", alpha=0.3)
+
+    if title is None:
+        title = f"Classification performance by {group_col}"
+
+    ax1.set_title(title)
+
+    sns.barplot(
+        data=stats,
+        x="group_label",
+        y="n",
+        color="lightgrey",
+        ax=ax2,
+    )
+
+    ax2.set_ylabel("n")
+    ax2.set_xlabel(group_col)
+    ax2.tick_params(axis="x", rotation=45)
+
+    plt.tight_layout()
+
+    if path is not None:
+        os.makedirs(path.parent, exist_ok=True)
+        fig.savefig(path, dpi=300, bbox_inches="tight")
+        stats.to_csv(path.with_suffix(".csv"), index=False)
+    plt.close(fig)

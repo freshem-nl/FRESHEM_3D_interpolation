@@ -53,7 +53,7 @@ def main(cfg):
         pred = preproc_grid.mask_per_layer(pred)
         if method == "ml":
             pred = preproc_ml.OGC(pred, cfg)
-        if method == "geostat" and cfg["use_anisotropy"]:
+        if method == "geostat":
             pred = anisotropy.anisotropy_of_observations(data, pred, cfg)
             visualisation.plot_laf(pred, cfg, suffix="_obs", step=1, ellipse_scale=5.0)
             pred = anisotropy.interpolate_to_laf(pred, cfg)
@@ -106,11 +106,11 @@ def main(cfg):
         pred_xval = read.dataset(cfg["path_prediction_xval"])
         xval.validation(data, pred_xval, cfg)
 
-    # preprocessing_data()
-    # preprocessing_prediction_grid()
-    # interpolation()
-    # postprocessing()
-    # interpolation_xval()
+    preprocessing_data()
+    preprocessing_prediction_grid()
+    interpolation()
+    postprocessing()
+    interpolation_xval()
     xval_scoring()
 
     # total runtime

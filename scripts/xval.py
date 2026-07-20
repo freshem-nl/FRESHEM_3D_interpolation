@@ -5,10 +5,10 @@ import pandas as pd
 import xarray as xr
 from sklearn.metrics import classification_report, confusion_matrix
 
-from scripts import _postproc_helper, _scoring, read, visualisation, write
+from scripts import _postproc_helper, _scoring, visualisation, write
 
 
-def xval_lines(data,cfg):
+def xval_lines(data, cfg):
 
     t0 = datetime.now()
     print("\nSPATIAL INTERPOLATION CROSS-VALIDATION")
@@ -56,25 +56,18 @@ def mask_line(data, mask_overall, line_no):
     ix = np.floor((data_line["x"] - x0) / dx).astype(int)
     iy = np.floor((data_line["y"] - y0) / dy).astype(int)
 
-    valid = (
-        (ix >= 0) & (ix < len(x)) &
-        (iy >= 0) & (iy < len(y))
-    )
+    valid = (ix >= 0) & (ix < len(x)) & (iy >= 0) & (iy < len(y))
 
     layers = data_line.loc[valid, "layer"].values
 
-    mask_line.values[
-        layers - 1,      # assuming layers are 1..30
-        iy[valid],
-        ix[valid]
-    ] = True
+    mask_line.values[layers - 1, iy[valid], ix[valid]] = True  # assuming layers are 1..30
 
     new_mask = mask_line & mask_overall  # only keep voxels that are also in the overall mask
 
     return new_mask
 
 
-def validation(data, pred_grid,cfg):
+def validation(data, pred_grid, cfg):
 
     t0 = datetime.now()
     print("\nCROSS-VALIDATION SCORING")
@@ -99,51 +92,16 @@ def validation(data, pred_grid,cfg):
             da = ds[var]
 
             # sample the data at the specified coordinates
-            df_sampled[var] = (
-                da.sel(layer=layer)
-                .sel(x=x, y=y, method="nearest")
-                .values
-            )
+            df_sampled[var] = da.sel(layer=layer).sel(x=x, y=y, method="nearest").values
 
         return df_sampled
 
-    # def sample(df, ds):
-
-    #     dx = ds.attrs["cellsize_x"]
-    #     dy = ds.attrs["cellsize_y"]
-
-    #     x0 = ds.x.values[0] - dx / 2
-    #     y0 = ds.y.values[0] - dy / 2
-
-    #     ix = ((df["x"].values - x0) // dx).astype(int)
-    #     iy = ((df["y"].values - y0) // dy).astype(int)
-    #     il = df["layer"].values - 1  # layer 1..30 -> 0..29
-
-    #     df_sampled = pd.DataFrame(index=df.index)
-
-    #     valid = (
-    #         (ix >= 0) & (ix < ds.sizes["x"]) &
-    #         (iy >= 0) & (iy < ds.sizes["y"]) &
-    #         (il >= 0) & (il < ds.sizes["layer"])
-    #     )
-
-    #     for var in ds.data_vars:
-    #         da = ds[var]
-
-    #         out = np.full(len(df), np.nan, dtype=float)
-
-    #         if set(da.dims) == {"layer", "y", "x"}:
-    #             out[valid] = da.values[il[valid], iy[valid], ix[valid]]
-
-    #         elif set(da.dims) == {"y", "x"}:
-    #             out[valid] = da.values[iy[valid], ix[valid]]
-
-    #         df_sampled[var] = out
-
-    #     return df_sampled
-
-    # predicted indicator probabilities from prediction grid
-    pred = sample(data, pred_grid, ind_cols).dropna()
+    # sample relevant data at sample locations from prediction grid
+    if cfg["method"] == "geostat":
+        cols = ind_cols + ["laf_ratio"]
+    else:
+        cols = ind_cols
+    pred = sample(data, pred_grid, cols).dropna()
 
     # true indicator probabilities from data, only keep rows with xval predition
     true = data.copy()
@@ -156,12 +114,18 @@ def validation(data, pred_grid,cfg):
     pred["median"] = _postproc_helper.ind_probs_to_quantiles(pred[ind_cols], inds, ind_bounds, (0.5,))
     pred["median class"] = _postproc_helper.class_from_quantile(pred["median"], inds, ind_bounds)
 
+
+    # create plots of performance by median class
+    path = dir_xval / "xval - performance by true median class.png"
+    visualisation.class_performance(true=true, pred=pred, group_col="median class", group_source="pred", path=path)
+
     # calculate RPS (ranked probability score) for each cell, and put in dataframe
     print("...ranked probability score (RPS)")
     rps = _scoring.rps_from_cdf(pred[ind_cols], true[ind_cols], normalize=True)
+    true = true.assign(RPS=rps)
 
     # summarize RPS overall and per class, and save to csv
-    path = dir_xval / "xval - ranked probability score - by true class.csv"
+    path = dir_xval / "xval - ranked probability score - by true median class.csv"
     _scoring.rps_summary(rps, true["median class"], path=path)
 
     # summarize RPS overall and per layer, and save to csv
@@ -170,15 +134,35 @@ def validation(data, pred_grid,cfg):
 
     # boxplot of overall RPS
     path = dir_xval / "xval - RPS.png"
-    visualisation.boxplot(true.assign(RPS=rps), y="RPS", path=path, showfliers=False)
+    visualisation.boxplot(true, y="RPS", path=path, showfliers=False)
 
-    # boxplot of RPS by true class
-    path = dir_xval / "xval - RPS by true class.png"
-    visualisation.boxplot(true.assign(RPS=rps), x="median class", y="RPS", path=path, showfliers=False)
+    # boxplot of RPS by true median class
+    path = dir_xval / "xval - RPS by true median class.png"
+    visualisation.boxplot(true, x="median class", y="RPS", path=path, showfliers=False)
 
     # boxplot of RPS by layer
     path = dir_xval / "xval - RPS by layer.png"
-    visualisation.boxplot(true.assign(RPS=rps), x="layer", y="RPS", path=path, showfliers=False)
+    visualisation.boxplot(true, x="layer", y="RPS", path=path, showfliers=False)
+
+    # laf ratio class plots
+    if "laf_ratio" in pred.columns:
+        bins = np.arange(0, 1.1, 0.1)
+        labels = [f"{b:.1f}-{b+0.1:.1f}" for b in bins[:-1]]
+
+        pred["laf_ratio"] = pd.cut(pred["laf_ratio"], bins=bins, labels=labels, include_lowest=True)
+        true['LAF ratio'] = pred['laf_ratio']
+
+        # plot of performance by LAF ratio class
+        path = dir_xval / "xval - performance by LAF ratio.png"
+        visualisation.class_performance(true=true, pred=pred, group_col="laf_ratio", group_source="pred", path=path)
+
+        # summarize RPS overall and per layer, and save to csv
+        path = dir_xval / "xval - ranked probability score - by LAF ratio.csv"
+        _scoring.rps_summary(rps, true["LAF ratio"], path=path)
+
+        # boxplot of RPS by LAF ratio
+        path = dir_xval / "xval - RPS vs LAF ratio.png"
+        visualisation.boxplot(true, x="LAF ratio", y="RPS", path=path, showfliers=False)
 
     # confusion matrix for median class
     print("...confusion matrix")
@@ -189,8 +173,6 @@ def validation(data, pred_grid,cfg):
     cms = [
         (confusion_matrix(y_true, y_pred, labels=labels), "counts", "d"),
         (confusion_matrix(y_true, y_pred, labels=labels, normalize="true"), "row-normalized", ".2f"),
-        (confusion_matrix(y_true, y_pred, labels=labels, normalize="pred"), "col-normalized", ".2f"),
-        (confusion_matrix(y_true, y_pred, labels=labels, normalize="all"), "normalized", ".2f"),
     ]
 
     for cm, title, fmt in cms:

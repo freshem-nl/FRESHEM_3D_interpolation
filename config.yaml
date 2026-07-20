@@ -1,5 +1,5 @@
-name: test_C3_aniso
-method: "geostat" # geostat, ml
+name: test_klein
+method: "ml" # geostat, ml
 
 # paths — set dir_base and dir_input in config.local.yaml (see config.local.yaml.example)
 
