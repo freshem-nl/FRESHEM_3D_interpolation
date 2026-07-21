@@ -3,7 +3,12 @@
 import html
 from pathlib import Path
 
-from rho_colormap import rho_freshem_classes
+from rho_colormap import RASTER_NODATA, RHO_LOWER, RHO_UPPER, rho_freshem_classes, rho_log_fraction
+
+
+def _rgb_hex(rgb: tuple[int, int, int]) -> str:
+    r, g, b = rgb
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 
 def _marker_symbol(symbol_id: int, rgb: tuple[int, int, int, int]) -> str:
@@ -105,4 +110,84 @@ def write_rho_freshem_qml(path, attribute: str = "rho") -> Path:
     """Write rho_freshem.qml for use with export_gpkg rho_points layers."""
     path = Path(path)
     path.write_text(rho_freshem_qml(attribute), encoding="utf-8")
+    return path
+
+
+def _shader_items(classes) -> str:
+    lines = []
+    for cls in classes:
+        label = html.escape(cls["label"], quote=True)
+        upper = cls["upper"]
+        value = "inf" if upper >= 1e8 else f"{upper:g}"
+        lines.append(
+            f'          <item label="{label}" color="{_rgb_hex(cls["rgb"])}" '
+            f'alpha="255" value="{value}"/>'
+        )
+    return "\n".join(lines)
+
+
+def _source_colorramp_props(classes) -> tuple[tuple[int, int, int], tuple[int, int, int], str]:
+    first = classes[0]["rgb"]
+    last = classes[-1]["rgb"]
+    stop_parts = []
+    for cls in classes:
+        bound = cls["upper"] if cls["upper"] < 1e8 else RHO_UPPER
+        pos = rho_log_fraction(max(bound, RHO_LOWER))
+        r, g, b = cls["rgb"]
+        stop_parts.append(f"{pos:.4f};{r},{g},{b},255")
+    return first, last, ":".join(stop_parts)
+
+
+def rho_freshem_raster_qml(band: int = 1, nodata: float = RASTER_NODATA) -> str:
+    """Build a singleband pseudocolor QML for postproc quantile GeoTIFFs."""
+    classes = rho_freshem_classes()
+    items = _shader_items(classes)
+    c1, c2, stops = _source_colorramp_props(classes)
+
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<qgis styleCategories="Symbology" version="3.34.0-Prizren">
+  <pipe>
+    <provider>
+      <resampling enabled="false" maxOversampling="2" zoomedInResamplingMethod="nearestNeighbour" zoomedOutResamplingMethod="nearestNeighbour"/>
+    </provider>
+    <rasterrenderer alphaBand="-1" band="{band}" classificationMin="{RHO_LOWER}" classificationMax="{RHO_UPPER}" type="singlebandpseudocolor" opacity="1">
+      <rasterTransparency/>
+      <minMaxOrigin>
+        <limits>None</limits>
+        <extent>WholeRaster</extent>
+        <stat>MinMax</stat>
+      </minMaxOrigin>
+      <rastershader>
+        <colorrampshader clip="0" colorRampType="DISCRETE" classificationMode="1" labelPrecision="6" maximumValue="{RHO_UPPER}" minimumValue="{RHO_LOWER}">
+          <colorramp type="gradient" name="[source]">
+            <prop k="color1" v="{c1[0]},{c1[1]},{c1[2]},255"/>
+            <prop k="color2" v="{c2[0]},{c2[1]},{c2[2]},255"/>
+            <prop k="discrete" v="1"/>
+            <prop k="rampType" v="gradient"/>
+            <prop k="stops" v="{stops}"/>
+          </colorramp>
+{items}
+        </colorrampshader>
+      </rastershader>
+    </rasterrenderer>
+    <brightnesscontrast brightness="0" contrast="0"/>
+    <huesaturation saturation="0" colorizeOn="0" colorizeRed="255" colorizeGreen="128" colorizeBlue="128" colorizeStrength="100" grayscaleMode="0"/>
+    <rasterresampler maxOversampling="2"/>
+    <resamplingStage>resamplingFilter</resamplingStage>
+  </pipe>
+  <blendMode>0</blendMode>
+  <layerTransparency enabled="0"/>
+  <customproperties>
+    <Option type="Map">
+      <Option name="freshem_nodata" type="double" value="{nodata}"/>
+    </Option>
+  </customproperties>
+</qgis>
+"""
+
+
+def write_rho_freshem_raster_qml(path, band: int = 1, nodata: float = RASTER_NODATA) -> Path:
+    """Write rho_freshem_raster.qml for postproc multiband GeoTIFFs."""
+    path = Path(path)
+    path.write_text(rho_freshem_raster_qml(band=band, nodata=nodata), encoding="utf-8")
     return path

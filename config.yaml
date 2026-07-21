@@ -4,10 +4,13 @@ method: "geostat" # geostat, ml
 # paths — set dir_base and dir_input in config.local.yaml (see config.local.yaml.example)
 
 data_input:
-  - Zuid_A1_proc_I01_MOD_inv.xyz
-  - Noord_Holland_B1_proc_I01_MOD_inv.xyz
+  # - Zuid_A1_proc_I01_MOD_inv.xyz
+  # - Noord_Holland_B1_proc_I01_MOD_inv.xyz
   # - LCI_Sharp_MOD_inv.xyz
   # - SCI_Sharp_Best_MOD_inv.xyz
+  # - Noord_B2_proc_I02_DOI225m_MOD_inv.xyz
+  - Noord_F_proc_I02_doi_325m_MOD_inv.xyz
+
 variable_name: "rho"
 variable_unit: "Ohm.m"
 indicators: [1,2,3,5,10,20,30,50,100]
