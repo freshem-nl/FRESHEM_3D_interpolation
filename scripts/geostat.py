@@ -7,11 +7,13 @@ import pandas as pd
 import xarray as xr
 from tqdm.auto import tqdm
 
-isa.setLicenseString("52100@lic-isatis.tno.nl")
-
 
 def kriging(data, pred, cfg, verbose=True):
     t0 = datetime.now()
+
+    # Set Isatis license
+    isa.setLicenseString("52100@lic-isatis.tno.nl")
+
     if verbose:
         print("\nSPATIAL INTERPOLATION")
         tqdm_leave = True
@@ -24,9 +26,9 @@ def kriging(data, pred, cfg, verbose=True):
     indicator_names = cfg["indicator_names"]
     range_xy = cfg["variogram_model_range_xy"]
     neigh_dist_xy = cfg["neighbourhood_dist_xy"]
-    neigh_dist_z = cfg["neighbourhood_dist_z"]
     neigh_n_sectors = cfg["neighbourhood_n_sectors"]
     neigh_max_neigh_per_sector = cfg["neighbourhood_max_neigh_per_sector"]
+    use_anisotropy = cfg["use_anisotropy"]
 
     layers = data["layer"].unique()
     txt = "interpolation per layer"
@@ -47,11 +49,22 @@ def kriging(data, pred, cfg, verbose=True):
         )
 
         # Build output dataframe in the exact same grid order
-        mask = pred_xy["mask"].values.ravel()
-        cell_id = np.arange(mask.size, dtype=np.int64)
+        df_out = pd.DataFrame(
+            {
+                "mask": pred_xy["mask"].values.ravel(),
+                "cell_id": np.arange(pred_xy["mask"].size),
+            }
+        )
 
-        df_out = pd.DataFrame({"mask": mask, "cell_id": cell_id})
+        # Add anisotropy variables to output dataframe if needed
+        if use_anisotropy:
+            df_out = df_out.assign(
+                laf_major_angle=pred_xy["laf_major_angle"].values.ravel(),
+                laf_factor_minor=pred_xy["laf_ratio"].values.ravel(),
+                laf_factor_major=1.0,
+            )
 
+        # Create Isatis output database
         output_db = isa.DbPandas(df_out, grid=grid)
 
         # Make multivariate variogram model
@@ -80,13 +93,25 @@ def kriging(data, pred, cfg, verbose=True):
         neigh = isa.Neigh(
             n_sectors=neigh_n_sectors,
             max_neigh_per_sector=neigh_max_neigh_per_sector,
-            ellipsoid_size=[neigh_dist_xy, neigh_dist_xy, neigh_dist_z],
+            ellipsoid_size=[neigh_dist_xy, neigh_dist_xy],
         )
+
+        # Create Local Geostatistics Set structure
+        if use_anisotropy:
+            aniso_rot_name = ["laf_major_angle"]
+            names_factors = ["laf_factor_major", "laf_factor_minor"]
+            lgs_vars = isa.LgsNames(conv_id=isa.CONV.MATH, names_rotation=aniso_rot_name, names_factors=names_factors)
 
         # Run kriging
         runner = isa.Kriging()
         runner.set_input_data(input_db, coords=["x", "y"], invars=indicator_names)
-        runner.set_output_data(output_db, sel="mask")
+        
+        if use_anisotropy:
+            # runner.set_output_data(output_db, sel="mask", lgs_model_vars=lgs_vars)
+            # runner.set_output_data(output_db, sel="mask", lgs_neigh_vars=lgs_vars)
+            runner.set_output_data(output_db, sel="mask", lgs_model_vars=lgs_vars,lgs_neigh_vars=lgs_vars)
+        else:
+            runner.set_output_data(output_db, sel="mask")
         output_db = runner.kriging(model=multi_vario, neigh=neigh)
 
         # Isatis database to dataframe

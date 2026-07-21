@@ -39,7 +39,7 @@ def plot_df(df, name, cfg):
     print(f"({(datetime.now() - t0).total_seconds():.2f}s)")
 
 
-def plot_ds(ds, name, cfg):
+def plot_ds(ds, name, cfg, do_not_plot=None):
     t0 = datetime.now()
 
     # from config
@@ -48,7 +48,6 @@ def plot_ds(ds, name, cfg):
     quantile_names = cfg["quantile_names"]
     plotting_layers = cfg["plotting_layers"]
 
-    # print(f"plotting dataset {list(ds.data_vars)} for layers {cfg['plotting_layers']}...", end=" ")
 
     def get_norm(da, var, indicator_names, quantile_names):
         if var in quantile_names:
@@ -64,9 +63,14 @@ def plot_ds(ds, name, cfg):
 
         return None
 
+    # remove variables that should not be plotted
+    if do_not_plot is not None:
+        ds = ds.drop_vars(do_not_plot, errors="ignore")
+
     os.makedirs(dir_plot, exist_ok=True)
 
     txt = f"plotting dataset {list(ds.data_vars)} for layers {cfg['plotting_layers']}"
+   
     for var in tqdm(ds.data_vars, desc=txt, unit="var"):
 
         # for var in ds.data_vars:
@@ -271,3 +275,282 @@ def anisotropy(
     # plt.show()
     plt.savefig(path)
     plt.close()
+
+
+def plot_laf(
+    ds,
+    cfg,
+    bbox=None,
+    step=10,
+    ellipse_scale=1.0,
+    cmap="viridis",
+    path=None,
+    suffix="",
+):
+
+    # from config
+    plotting_layers = cfg["plotting_layers"]
+    indicators = cfg["indicators"]
+    indicator_names = cfg["indicator_names"]
+    aniso_indicator = cfg["aniso_indicator"]
+    dir_plot = cfg["dir_plot"]
+
+    # variable to use for anisotropy estimation
+    var = indicator_names[indicators.index(aniso_indicator)]
+
+    p_var = f"{var}_obs"
+    angle_var = f"laf_major_angle{suffix}"
+    ratio_var = f"laf_ratio{suffix}"
+
+    x = ds.x.values
+    y = ds.y.values
+
+    if bbox is None:
+        x_mask = np.ones_like(x, dtype=bool)
+        y_mask = np.ones_like(y, dtype=bool)
+    else:
+        xmin, xmax, ymin, ymax = bbox
+        x_mask = (x >= xmin) & (x <= xmax)
+        y_mask = (y >= ymin) & (y <= ymax)
+
+    xs = x[x_mask]
+    ys = y[y_mask]
+    xx, yy = np.meshgrid(xs, ys)
+
+    slices = (
+        [(layer, ds.sel(layer=layer)) for layer in plotting_layers if layer in ds.layer.values]
+        if "layer" in ds.dims
+        else [(None, ds)]
+    )
+
+    txt = f"plotting laf for layers {cfg['plotting_layers']}"
+    for layer, da in tqdm(slices, desc=txt, unit="layer"):
+
+        p = da[p_var].values[np.ix_(y_mask, x_mask)]
+        angle = da[angle_var].values[np.ix_(y_mask, x_mask)]
+        ratio = da[ratio_var].values[np.ix_(y_mask, x_mask)]
+
+        # Choose ellipse size from plotting density and an explicit scale factor.
+        dx = np.nanmedian(np.abs(np.diff(xs)))
+        dy = np.nanmedian(np.abs(np.diff(ys)))
+        ellipse_major = ellipse_scale * step * min(dx, dy)
+
+        # Keep visual ellipse ratios in a valid range.
+        ratio = np.clip(ratio, 0.0, 1.0)
+
+        rows, cols = np.indices(angle.shape)
+        valid = np.isfinite(angle) & np.isfinite(ratio) & (rows % step == 0) & (cols % step == 0)
+
+        fig, ax = plt.subplots(figsize=(10, 8))
+
+        im = ax.pcolormesh(xs, ys, p, shading="auto", cmap=cmap)
+        cbar = fig.colorbar(im, ax=ax)
+        cbar.set_label(p_var)
+
+        for xi, yi, ai, ri in zip(xx[valid], yy[valid], angle[valid], ratio[valid]):
+            ell = Ellipse(
+                (xi, yi),
+                width=ellipse_major,
+                height=ellipse_major * ri,
+                angle=ai,
+                facecolor="none",
+                edgecolor="black",
+                linewidth=0.7,
+                alpha=0.8,
+            )
+            ax.add_patch(ell)
+
+        ax.set_aspect("equal")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_title(f"{p_var} with LAF ellipses | layer {layer}")
+
+        if bbox is not None:
+            ax.set_xlim(xmin, xmax)
+            ax.set_ylim(ymin, ymax)
+
+        plt.tight_layout()
+        if suffix == "":
+            filename = f"anisotropy - layer_{layer}.png"
+        else:
+            filename = f"anisotropy - layer_{layer} - {suffix.replace('_', '')}.png"
+        path = dir_plot / "grid" / filename
+        os.makedirs(path.parent, exist_ok=True)
+        plt.savefig(path, dpi=300)
+        plt.close()
+
+
+import pandas as pd
+
+
+def class_performance(
+    true,
+    pred,
+    group_col,
+    true_class_col="median class",
+    pred_class_col="median class",
+    group_source="pred",
+    include_within_1=True,
+    title=None,
+    path=None,
+    figsize=(9, 6),
+):
+    """
+    Plot classification performance per existing category/group.
+
+    Parameters
+    ----------
+    true, pred : pandas.DataFrame
+        Dataframes with true and predicted class labels.
+    group_col : str
+        Existing categorical/group column, e.g. 'laf_ratio_class' or 'median class'.
+    true_class_col, pred_class_col : str
+        Columns with true and predicted classes.
+    group_source : {'true', 'pred'}
+        Dataframe from which group_col is taken.
+    include_within_1 : bool
+        Also plot fraction of predictions within +/- 1 class.
+    title : str, optional
+        Plot title.
+    path : pathlib.Path or str, optional
+        If given, save figure to this path.
+
+    Returns
+    -------
+    stats : pandas.DataFrame
+        Performance statistics per group.
+    fig : matplotlib.figure.Figure
+        Figure object.
+    """
+
+    y_true = true[true_class_col]
+    y_pred = pred[pred_class_col]
+
+    if isinstance(y_true.dtype, pd.CategoricalDtype):
+        categories = y_true.cat.categories
+        y_true_code = y_true.cat.codes
+        y_pred_code = y_pred.astype(pd.CategoricalDtype(categories=categories, ordered=True)).cat.codes
+    else:
+        y_true_code = y_true
+        y_pred_code = y_pred
+
+    group = true[group_col] if group_source == "true" else pred[group_col]
+
+    df = pd.DataFrame(
+        {
+            "group": group,
+            "true": y_true_code,
+            "pred": y_pred_code,
+        }
+    ).dropna()
+
+    df["abs_error"] = np.abs(df["true"] - df["pred"])
+    df["correct"] = df["true"] == df["pred"]
+    df["within_1"] = df["abs_error"] <= 1
+
+    stats = (
+        df.groupby("group", observed=True, sort=True)
+        .agg(
+            n=("correct", "size"),
+            mae=("abs_error", "mean"),
+            accuracy=("correct", "mean"),
+            within_1=("within_1", "mean"),
+        )
+        .reset_index()
+    )
+
+    stats["group_label"] = stats["group"].astype(str)
+
+    metrics = ["mae", "accuracy"]
+    if include_within_1:
+        metrics.append("within_1")
+
+    stats_long = stats.melt(
+        id_vars=["group", "group_label", "n"],
+        value_vars=metrics,
+        var_name="metric",
+        value_name="value",
+    )
+
+    fig, (ax1, ax2) = plt.subplots(
+        2,
+        1,
+        figsize=figsize,
+        sharex=True,
+        gridspec_kw={"height_ratios": [3, 1]},
+    )
+
+    sns.lineplot(
+        data=stats_long,
+        x="group_label",
+        y="value",
+        hue="metric",
+        marker="o",
+        ax=ax1,
+    )
+
+    ax1.set_ylabel("Performance")
+    ax1.set_xlabel("")
+    ax1.grid(axis="y", alpha=0.3)
+
+    if title is None:
+        title = f"Classification performance by {group_col}"
+
+    ax1.set_title(title)
+
+    sns.barplot(
+        data=stats,
+        x="group_label",
+        y="n",
+        color="lightgrey",
+        ax=ax2,
+    )
+
+    ax2.set_ylabel("n")
+    ax2.set_xlabel(group_col)
+    ax2.tick_params(axis="x", rotation=45)
+
+    plt.tight_layout()
+
+    if path is not None:
+        os.makedirs(path.parent, exist_ok=True)
+        fig.savefig(path, dpi=300, bbox_inches="tight")
+        stats.to_csv(path.with_suffix(".csv"), index=False)
+    plt.close(fig)
+
+
+def feature_importance(model, cfg):
+
+    # from config
+    dir_plot = cfg["dir_plot"]
+
+    path = dir_plot / "prediction - feature importance.png"
+
+    imp = pd.DataFrame(
+        {
+            "feature": cfg["features"],
+            "importance": model.feature_importances_,
+        }
+    ).sort_values("importance", ascending=True)
+
+    imp.to_csv(path.with_suffix(".csv"), index=False)
+
+    fig, ax = plt.subplots(figsize=(8, max(4, len(imp) * 0.3)))
+
+    sns.barplot(
+        data=imp,
+        x="importance",
+        y="feature",
+        color="steelblue",
+        ax=ax,
+    )
+
+    ax.set_title("Feature importance")
+    ax.set_xlabel("Importance")
+    ax.set_ylabel("")
+
+    plt.tight_layout()
+    plt.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    return fig, ax, imp

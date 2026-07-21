@@ -58,7 +58,7 @@ def oblique_geographic_coordinates(x_crds, y_crds, theta_deg):
         ogc = pd.Series(ogc, index=x_crds.index)
 
     # Ensure consistent raster dimension order for xarray output
-    elif hasattr(ogc, "dims") and set(ogc.dims) == {"X", "Y"}:
-        ogc = ogc.transpose("Y", "X")
+    elif hasattr(ogc, "dims") and set(ogc.dims) == {"x", "y"}:
+        ogc = ogc.transpose("y", "x")
 
     return ogc

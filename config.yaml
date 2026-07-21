@@ -1,4 +1,4 @@
-name: batch_test
+name: test C3
 method: "geostat" # geostat, ml
 
 # paths — set dir_base and dir_input in config.local.yaml (see config.local.yaml.example)
@@ -31,32 +31,31 @@ cellsize_xy: 50
 cellsize_z: 0.5
 buffer_xy: 300
 buffer_z: 3
-xval_n_lines: 10
+xval_n_lines: 25
 
 #geostat variables
+use_anisotropy: True
 variogram_model_range_xy: 1000.0
-variogram_model_range_z: 2.01
+variogram_minor_range_xy_min: 100.0
 neighbourhood_dist_xy: 1000.0
-neighbourhood_dist_z: 0.99
 neighbourhood_n_sectors: 4
-neighbourhood_max_neigh_per_sector: 4
+neighbourhood_max_neigh_per_sector: 8
     
 
 # ml variables
-# OGC_angles: [7.5,22.5,37.5,52.5,67.5,82.5,97.5,112.5,127.5,142.5,157.5,172.5]
-rf_n_trees: 200
-features: ['z', 'OGC(7.5°)', 'OGC(22.5°)', 'OGC(37.5°)', 'OGC(52.5°)', 'OGC(67.5°)', 'OGC(82.5°)', 'OGC(97.5°)', 'OGC(112.5°)', 'OGC(127.5°)', 'OGC(142.5°)', 'OGC(157.5°)', 'OGC(172.5°)']
+rf_n_trees: 500
+features: ['layer', 'OGC(7.5°)', 'OGC(22.5°)', 'OGC(37.5°)', 'OGC(52.5°)', 'OGC(67.5°)', 'OGC(82.5°)', 'OGC(97.5°)', 'OGC(112.5°)', 'OGC(127.5°)', 'OGC(142.5°)', 'OGC(157.5°)', 'OGC(172.5°)']
 
 # plotting
-# plotting_depths: [-150, -50, -10, -5, 0.0]
-plotting_layers: [1,5,15,25]
+plotting_layers: [1,7,15,25]
 histogram_bins: 50
-histogram_sample_size: 25000
+histogram_sample_size: 10000
 
 # anisotropy
 aniso_indicator: 5
-aniso_indicator_z_range: 3.0
-aniso_long_axis_min: 500.0
-aniso_long_axis_max: 10000.0
-aniso_short_axis_max: 1000.0
-aniso_long_short_angle_min_diff: 30.0
+aniso_pca_radius: 1000
+aniso_pca_nmin: 20
+aniso_pca_eig_ratio_min: 2.0
+aniso_pca_sampling_eig_min: 2.0
+aniso_pca_angle_diff_max: 15.0
+aniso_idw_k: 16

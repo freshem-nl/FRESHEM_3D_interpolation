@@ -26,20 +26,26 @@ def load_config(path="config.yaml", data_input=None):
 
     if not cfg.get("dir_base") or not cfg.get("dir_input"):
         raise FileNotFoundError(
-            f"dir_base and dir_input must be set in {local_path} "
-            "(copy from config.local.yaml.example)"
+            f"dir_base and dir_input must be set in {local_path} " "(copy from config.local.yaml.example)"
         )
 
     t0 = datetime.today()
 
-    #vars
+    # vars
     cfg["indicator_names"] = [f'P({cfg["variable_name"]}≤{x})' for x in cfg["indicators"]]
-    cfg["quantile_names"] = [f'Q({q})' for q in cfg["quantiles"]]
+    cfg["quantile_names"] = [f"Q({q})" for q in cfg["quantiles"]]
 
     # paths
     cfg["dir_base"] = Path(cfg["dir_base"])
     cfg["dir_input"] = Path(cfg["dir_input"])
-    run_name = f'{t0.strftime("%Y%m%d")} - {cfg["method"]} - {cfg["variable_name"]} - {cfg["name"]}'
+    run_name = (
+        f'{t0.strftime("%Y%m%d")} - '
+        f'{cfg["method"]}'
+        f'{" with laf" if (cfg["method"] == "geostat" and cfg["use_anisotropy"]) else ""}'
+        f'{" isotropic" if (cfg["method"] == "geostat" and not cfg["use_anisotropy"]) else ""}'
+        f' - {cfg["variable_name"]} - {cfg["name"]}'
+    )
+    # run_name = f'{t0.strftime("%Y%m%d")} - {cfg["method"]} - {cfg["variable_name"]} - {cfg["name"]}'
     output_base = Path(cfg["dir_output_base"]) if cfg.get("dir_output_base") else cfg["dir_base"] / "output"
     cfg["dir_output"] = output_base / run_name
     cfg["dir_data"] = cfg["dir_output"] / "data"
