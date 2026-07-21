@@ -1,0 +1,10 @@
+# Combine per-area postproc NetCDF files onto one RD-aligned grid.
+# Later sources overwrite earlier ones where both have data.
+# Run: python combine_nc/main.py --config config.yaml
+
+sources:
+  - '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_local\Interpolation\output\20260715 - geostat - rho - batch_test - Noord_B2_proc_I02_DOI225m_MOD_inv\data\Noord_B2_proc_I02_DOI225m_MOD_inv - postproc.nc'
+  - '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_local\Interpolation\output\20260715 - geostat - rho - batch_test - Noord_F_proc_I02_doi_325m_MOD_inv\data\Noord_F_proc_I02_doi_325m_MOD_inv - postproc.nc'
+
+paths:
+  output_nc: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_local\Interpolation\output\20260716 - combined nc - Noord_B2_F\Noord_B2_F - postproc.nc'
