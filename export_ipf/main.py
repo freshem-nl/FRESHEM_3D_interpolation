@@ -44,6 +44,7 @@ def main(cfg):
         min_spacing_m=cfg.get("min_spacing_m"),
         apply_doi_clip=cfg.get("apply_doi_clip", True),
         doi_name=cfg.get("doi_name", "doi_standard"),
+        associated_dirname=cfg.get("associated_dirname", "soundings"),
         write_dlf=cfg.get("write_dlf", True),
         dlf_name=cfg.get("dlf_name", "rho_freshem.dlf"),
     )

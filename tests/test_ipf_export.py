@@ -1,13 +1,7 @@
 """Tests for SkyTEM xyz -> iMOD IPF export."""
 
 from scripts.gpkg_export import parse_skytem_xyz
-from scripts.ipf_export import (
-    assign_sounding_ids,
-    export_rho_ipf,
-    layers_long,
-    resolve_package_ipf_path,
-    thin_min_spacing,
-)
+from scripts.ipf_export import assign_sounding_ids, export_rho_ipf, layers_long, thin_min_spacing
 
 
 XYZ_SAMPLE = """\
@@ -46,12 +40,6 @@ def test_assign_sounding_ids(tmp_path):
     assert list(df["sounding_id"]) == ["L1_0001", "L1_0002", "L2_0001", "L2_0002"]
 
 
-def test_resolve_package_ipf_path(tmp_path):
-    assert resolve_package_ipf_path(tmp_path / "survey.ipf") == tmp_path / "survey" / "survey.ipf"
-    nested = tmp_path / "survey" / "survey.ipf"
-    assert resolve_package_ipf_path(nested) == nested
-
-
 def test_layers_long(tmp_path):
     xyz_path = tmp_path / "sample.xyz"
     _write_sample_xyz(xyz_path)
@@ -71,16 +59,16 @@ def test_export_rho_ipf(tmp_path):
 
     result = export_rho_ipf(xyz_path, ipf_path, apply_doi_clip=False)
 
-    assert result["ipf"] == tmp_path / "sample" / "sample.ipf"
+    assert result["ipf"] == ipf_path
     assert result["ipf"].is_file()
     assert result["dlf"].is_file()
-    assert result["associated_dir"] == tmp_path / "sample"
+    assert result["associated_dir"] == tmp_path / "soundings"
 
     ipf_text = result["ipf"].read_text(encoding="utf-8").splitlines()
     assert ipf_text[0] == "4"
     assert ipf_text[1] == "6"
     assert ipf_text[8].startswith("3,txt")
-    assert ipf_text[9].split(",")[2] == "L1_0001"
+    assert ipf_text[9].split(",")[2] == r"soundings\L1_0001"
 
     txt = (result["associated_dir"] / "L1_0001.txt").read_text(encoding="utf-8").splitlines()
     assert txt[0] == "2"
@@ -111,7 +99,7 @@ def test_export_rho_ipf_bbox(tmp_path):
     ipf_text = result["ipf"].read_text(encoding="utf-8").splitlines()
     assert ipf_text[0] == "2"
     assert len(list(result["associated_dir"].glob("L*_*.txt"))) == 2
-    assert ipf_text[9].split(",")[2] == "L2_0001"
+    assert ipf_text[9].split(",")[2] == r"soundings\L2_0001"
 
 
 def test_export_rho_ipf_doi_clip(tmp_path):
@@ -157,4 +145,9 @@ def test_export_rho_ipf_min_spacing(tmp_path):
     assert result["ipf"].read_text(encoding="utf-8").splitlines()[0] == "4"
     assert len(list(result["associated_dir"].glob("L*_*.txt"))) == 4
     ids = [line.split(",")[2] for line in result["ipf"].read_text(encoding="utf-8").splitlines()[9:]]
-    assert ids == ["L1_0001", "L1_0002", "L1_0003", "L2_0001"]
+    assert ids == [
+        r"soundings\L1_0001",
+        r"soundings\L1_0002",
+        r"soundings\L1_0003",
+        r"soundings\L2_0001",
+    ]

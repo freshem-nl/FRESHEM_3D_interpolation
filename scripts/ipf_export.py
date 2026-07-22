@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -16,8 +16,6 @@ if str(_QML_DIR) not in sys.path:
     sys.path.insert(0, str(_QML_DIR))
 
 from rho_colormap import rho_freshem_classes, rho_to_class_index, write_rho_freshem_dlf  # noqa: E402
-
-_SOUNDING_TXT_RE = re.compile(r"^L.+_\d{4}\.txt$")
 
 
 def thin_min_spacing(df: pd.DataFrame, min_spacing_m) -> pd.DataFrame:
@@ -61,23 +59,6 @@ def assign_sounding_ids(df: pd.DataFrame) -> pd.DataFrame:
         ids.append(f"L{tag}_{counters[tag]:04d}")
     out["sounding_id"] = ids
     return out
-
-
-def resolve_package_ipf_path(ipf_path: Path) -> Path:
-    """Place IPF in a same-named package folder so TXT can sit beside it without a path prefix."""
-    ipf_path = Path(ipf_path)
-    if ipf_path.parent.name == ipf_path.stem:
-        return ipf_path
-    return ipf_path.parent / ipf_path.stem / ipf_path.name
-
-
-def clear_sounding_txt(package_dir: Path) -> None:
-    """Remove previously exported sounding TXT files in the package folder."""
-    if not package_dir.is_dir():
-        return
-    for path in package_dir.iterdir():
-        if path.is_file() and _SOUNDING_TXT_RE.match(path.name):
-            path.unlink()
 
 
 def layers_long(df: pd.DataFrame) -> pd.DataFrame:
@@ -206,17 +187,23 @@ def export_rho_ipf(
     min_spacing_m=None,
     apply_doi_clip=True,
     doi_name="doi_standard",
+    associated_dirname="soundings",
     write_dlf=True,
     dlf_name="rho_freshem.dlf",
 ):
     """Parse SkyTEM rho xyz and write an iMOD IPF + associated TXT logs.
 
-    Layout: ``{name}/{name}.ipf`` with ``L{line}_{nnnn}.txt`` beside the IPF
-    so iMOD IDs are bare sounding names (no folder prefix).
+    Layout matches borehole IPFs (Windows-style associated paths)::
+
+        {name}.ipf
+        {associated_dirname}\\L{line}_{nnnn}.txt
+
+    IDs in the IPF use backslash separators, e.g. ``soundings\\L100_0001``.
     """
     xyz_path = Path(xyz_path)
-    ipf_path = resolve_package_ipf_path(Path(ipf_path))
-    package_dir = ipf_path.parent
+    ipf_path = Path(ipf_path)
+    assoc_name = associated_dirname or "soundings"
+    assoc_dir = ipf_path.parent / assoc_name
 
     if not xyz_path.is_file():
         raise FileNotFoundError(f"Input file not found: {xyz_path}")
@@ -252,8 +239,10 @@ def export_rho_ipf(
     if long.empty:
         raise ValueError("No layers left after DOI clipping.")
 
-    package_dir.mkdir(parents=True, exist_ok=True)
-    clear_sounding_txt(package_dir)
+    ipf_path.parent.mkdir(parents=True, exist_ok=True)
+    if assoc_dir.exists():
+        shutil.rmtree(assoc_dir)
+    assoc_dir.mkdir(parents=True, exist_ok=True)
 
     classes = rho_freshem_classes()
     z_doi = z_doi_column(doi_name)
@@ -266,7 +255,7 @@ def export_rho_ipf(
         if group.empty:
             continue
         group = group.sort_values("layer")
-        txt_path = package_dir / f"{sounding_id}.txt"
+        txt_path = assoc_dir / f"{sounding_id}.txt"
         write_associated_txt(txt_path, group, classes)
         n_written += 1
 
@@ -280,7 +269,7 @@ def export_rho_ipf(
             {
                 "x": first["x"],
                 "y": first["y"],
-                "id": sounding_id,
+                "id": f"{assoc_name}\\{sounding_id}",
                 "elevation": first["elevation"],
                 "doi": doi_mv,
                 "line_no": first["line_no"],
@@ -297,4 +286,4 @@ def export_rho_ipf(
         write_rho_freshem_dlf(dlf_path)
         print(f"Wrote {dlf_path}")
 
-    return {"ipf": ipf_path, "associated_dir": package_dir, "dlf": dlf_path}
+    return {"ipf": ipf_path, "associated_dir": assoc_dir, "dlf": dlf_path}
