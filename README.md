@@ -31,3 +31,5 @@ Output:
 - `{name}.ipf` — sounding points; ID is `soundings\L{line}_{nnnn}` (Windows-style, like borehole IPFs)
 - `soundings/L{line}_{nnnn}.txt` — associated 1D logs (`topnap`, `rho`, `rho_class`)
 - `rho_freshem.dlf` — discrete Freshem rho legend for colouring `rho_class`
+
+Alternate iMOD rho legends (custom RGB, round bins): `rho_zoet` / `rho_zout` `.leg` + `.dlf` under `snippets_chris/example_imod/` (linear 0–100 / log 1–100).

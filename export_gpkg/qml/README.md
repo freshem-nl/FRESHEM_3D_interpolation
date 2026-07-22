@@ -1,6 +1,10 @@
 # Freshem rho colour scale (iMOD + QGIS)
 
-Shared palette for resistivity: log scale 0.01–150 Ωm, `RdYlBu_r`, gamma 1.5 (more blue at low rho).
+Shared palettes for resistivity:
+
+- **freshem** — log 0.01–150 Ωm, `RdYlBu_r`, gamma 1.5
+- **zoet** — linear 0–100 Ωm, custom RGB ramp, round bins, open ends
+- **zout** — log 1–100 Ωm, same custom RGB ramp, round bins, open ends
 
 ## QGIS — vector points (SkyTEM xyz gpkg)
 
@@ -26,13 +30,14 @@ The raster QML uses **Singleband pseudocolor** with discrete Freshem classes —
 
 ```bash
 python export_gpkg/qml/gen_rho_qml.py
+python snippets_chris/example_imod/leg/_gen_prob_legs.py
 ```
 
 ## Source
 
-- `rho_colormap.py` — constants, log/gamma mapping, `rho_freshem_classes()`
+- `rho_colormap.py` — constants, log/gamma mapping, freshem/zoet/zout classes
 - `rho_qml.py` — vector + raster QML builders
 - `gen_rho_qml.py` — writes both `.qml` files
 
-iMOD `.leg` files live in `snippets_chris/example_imod/leg/`.
-iMOD `.dlf` for IPF associated-file colouring is written by `export_ipf/` (`rho_freshem.dlf`).
+iMOD `.leg` files live in `snippets_chris/example_imod/leg/` (`rho_freshem`, `rho_zoet`, `rho_zout`).
+iMOD `.dlf` files live in `snippets_chris/example_imod/dlf/` (`rho_zoet`, `rho_zout`); IPF export also writes `rho_freshem.dlf` next to the IPF.
