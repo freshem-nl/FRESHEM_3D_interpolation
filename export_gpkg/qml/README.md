@@ -35,3 +35,4 @@ python export_gpkg/qml/gen_rho_qml.py
 - `gen_rho_qml.py` — writes both `.qml` files
 
 iMOD `.leg` files live in `snippets_chris/example_imod/leg/`.
+iMOD `.dlf` for IPF associated-file colouring is written by `export_ipf/` (`rho_freshem.dlf`).

@@ -1,0 +1,28 @@
+# SkyTEM rho xyz -> iMOD IPF (associated 1D rho logs + DLF)
+# Run: python export_ipf/main.py --config config.rho.yaml
+# UNC paths: use single quotes or forward slashes
+#
+# Output package layout:
+#   {name}/
+#     {name}.ipf
+#     L{line}_{nnnn}.txt
+#     rho_freshem.dlf
+# If ipf_file is .../{name}.ipf, files are written under .../{name}/.
+
+paths:
+  xyz_file: '//tsn.tno.nl/RA-Data/Express/Datachris/Projecten/FreshEM_local/Interpolation/20260715_Noord_F_Noord_B2/Noord_F_proc_I02_doi_325m_MOD_inv.xyz'
+  ipf_file: 'C:/Temp_Geomodelling/FreshEM/ipf/lagenmodel/Noord_F_proc_I02_doi_325m_MOD_inv.ipf'
+
+# Optional XY clip: [xmin, xmax, ymin, ymax]. Omit or leave empty for full extent.
+# clip_bbox: [220000, 222000, 570000, 580000]
+
+# Thin along each flight line: keep soundings at least this far apart (metres).
+# Omit or set null/0 to keep all soundings.
+min_spacing_m: 75
+
+# Clip layers below depth of investigation (matches main pipeline / gpkg export).
+apply_doi_clip: true
+doi_name: doi_standard
+
+write_dlf: true
+dlf_name: rho_freshem.dlf

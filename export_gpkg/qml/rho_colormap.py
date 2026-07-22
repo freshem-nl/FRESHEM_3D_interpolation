@@ -1,5 +1,7 @@
 """Freshem resistivity colour scale for iMOD legends, plots, and QGIS styles."""
 
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LogNorm
@@ -64,6 +66,7 @@ def rho_freshem_classes():
 
         classes.append(
             {
+                "index": i,
                 "lower": lower,
                 "upper": t_hi,
                 "label": label,
@@ -72,3 +75,34 @@ def rho_freshem_classes():
         )
 
     return classes
+
+
+def rho_to_class_index(rho, classes=None):
+    """Map a resistivity value to the Freshem discrete class index."""
+    if classes is None:
+        classes = rho_freshem_classes()
+    if rho is None or (isinstance(rho, float) and np.isnan(rho)):
+        return None
+    for cls in classes:
+        if cls["lower"] <= rho < cls["upper"]:
+            return cls["index"]
+    return classes[-1]["index"]
+
+
+def format_rho_freshem_dlf(classes=None):
+    """Return iMOD DLF text for Freshem rho classes (IPF associated-file colouring)."""
+    if classes is None:
+        classes = rho_freshem_classes()
+    lines = ["Label,Ired,Igreen,Iblue,Label-text"]
+    for cls in classes:
+        r, g, b = cls["rgb"]
+        lines.append(f'"{cls["index"]}",{r},{g},{b},"{cls["label"]}",0.5')
+    return "\n".join(lines) + "\n"
+
+
+def write_rho_freshem_dlf(path):
+    """Write an iMOD DLF legend for Freshem resistivity classes."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(format_rho_freshem_dlf(), encoding="utf-8")
+    return path

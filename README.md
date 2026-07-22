@@ -18,3 +18,16 @@ Standalone exporter for raw SkyTEM rho inversion xyz files (pre-pipeline inspect
 2. Run `python export_gpkg/main.py --config config.rho.yaml`
 
 Output: GeoPackage with `rho_points` (one row per layer per measurement, with `z_top`/`z_bottom`) and `flightlines`.
+
+## SkyTEM xyz to iMOD IPF export
+
+Standalone exporter for raw SkyTEM rho inversion xyz files (borehole-style inspection in iMOD).
+
+1. Set `paths.xyz_file` and `paths.ipf_file` in `export_ipf/config.rho.yaml`
+2. Optionally set `clip_bbox` and/or `min_spacing_m` (along-line thinning)
+3. Run `python export_ipf/main.py --config config.rho.yaml`
+
+Output package (`{name}/` next to the configured `.ipf` path):
+- `{name}.ipf` — sounding points; ID is `L{line}_{nnnn}`
+- `L{line}_{nnnn}.txt` — associated 1D logs beside the IPF
+- `rho_freshem.dlf` — discrete Freshem rho legend for colouring `rho_class`
