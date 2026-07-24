@@ -5,7 +5,7 @@
 1. Copy `config.local.yaml.example` to `config.local.yaml` and set `dir_base`, `dir_input`
 2. Run `python main.py` from the repo root
 
-With `export.idf.enabled: true`, postprocessing writes layer-coloured IDFs under `{dir_output}/idf/{property}/` (from `postproc.nc`).
+With `export.idf.enabled: true`, postprocessing writes layer-coloured IDFs under `{dir_output}/idf/{property}/` (from `postproc.nc`). With `export.mdf.enabled: true`, MDFs follow immediately under `{dir_output}/mdf/`, embedding the chosen legend from `data/leg/`.
 
 ## NetCDF to iMOD IDF export (standalone)
 

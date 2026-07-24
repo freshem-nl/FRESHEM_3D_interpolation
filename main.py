@@ -10,6 +10,7 @@ from scripts import (
     depth,
     geostat,
     idf_export,
+    mdf_export,
     ml,
     postproc,
     preproc_data,
@@ -127,11 +128,28 @@ def main(cfg):
         )
         print("done.")
 
+    def export_mdf():
+        export_cfg = (cfg.get("export") or {}).get("mdf") or {}
+        if not export_cfg.get("enabled"):
+            return
+        idf_cfg = (cfg.get("export") or {}).get("idf") or {}
+        properties = idf_cfg.get("properties")
+        legend_name = export_cfg.get("legend")
+        if not properties:
+            raise ValueError("export.idf.properties must be set when export.mdf.enabled")
+        if not legend_name:
+            raise ValueError("export.mdf.legend must be set when export.mdf.enabled")
+        leg_path = cfg["dir_leg"] / legend_name
+        print(f"\nexport MDF to {cfg['dir_mdf']}...", end=" ")
+        mdf_export.export_mdfs(cfg["dir_idf"], cfg["dir_mdf"], properties, leg_path)
+        print("done.")
+
     preprocessing_data()
     preprocessing_prediction_grid()
     interpolation()
     postprocessing()
     export_idf()
+    export_mdf()
     interpolation_xval()
     xval_scoring()
 

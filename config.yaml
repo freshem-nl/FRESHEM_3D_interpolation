@@ -68,3 +68,6 @@ export:
     enabled: true
     properties: ["Q(0.5)"]
     # layers: [1, 2, 3]  # optional subset for quick iMOD tests
+  mdf:
+    enabled: true
+    legend: rho_zout.leg  # file in data/leg/
