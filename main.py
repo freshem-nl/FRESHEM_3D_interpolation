@@ -9,6 +9,7 @@ from scripts import (
     config_loader,
     depth,
     geostat,
+    idf_export,
     ml,
     postproc,
     preproc_data,
@@ -112,10 +113,25 @@ def main(cfg):
         pred_xval = read.dataset(cfg["path_prediction_xval"])
         xval.validation(data, pred_xval, cfg)
 
+    def export_idf():
+        export_cfg = (cfg.get("export") or {}).get("idf") or {}
+        if not export_cfg.get("enabled"):
+            return
+        properties = export_cfg.get("properties")
+        print(f"\nexport IDF to {cfg['dir_idf']}...", end=" ")
+        idf_export.export_layer_coloured(
+            cfg["path_postproc"],
+            cfg["dir_idf"],
+            properties,
+            export_cfg.get("layers"),
+        )
+        print("done.")
+
     preprocessing_data()
     preprocessing_prediction_grid()
     interpolation()
     postprocessing()
+    export_idf()
     interpolation_xval()
     xval_scoring()
 

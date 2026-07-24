@@ -52,6 +52,7 @@ def load_config(path="config.yaml", data_input=None):
     cfg["dir_plot"] = cfg["dir_output"] / "plots"
     cfg["dir_rasters"] = cfg["dir_output"] / "rasters"
     cfg["dir_xval"] = cfg["dir_output"] / "cross-validation"
+    cfg["dir_idf"] = cfg["dir_output"] / "idf"
     cfg["path_input"] = cfg["dir_input"] / cfg["data_input"]
 
     # temp files

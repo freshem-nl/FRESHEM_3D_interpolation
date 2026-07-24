@@ -1,15 +1,17 @@
-name: test C3
+name: iso
 method: "geostat" # geostat, ml
 
 # paths — set dir_base and dir_input in config.local.yaml (see config.local.yaml.example)
 
 data_input:
-  # - Zuid_A1_proc_I01_MOD_inv.xyz
+  - Zuid_A1_proc_I01_MOD_inv.xyz
+  # - Noord_Holland_A_proc_I01_MOD_inv.xyz
   # - Noord_Holland_B1_proc_I01_MOD_inv.xyz
+  # - Noord_Holland_B2_proc_I01_MOD_inv.xyz
   # - LCI_Sharp_MOD_inv.xyz
   # - SCI_Sharp_Best_MOD_inv.xyz
   # - Noord_B2_proc_I02_DOI225m_MOD_inv.xyz
-  - Noord_F_proc_I02_doi_325m_MOD_inv.xyz
+  # - Noord_F_proc_I02_doi_325m_MOD_inv.xyz
 
 variable_name: "rho"
 variable_unit: "Ohm.m"
@@ -34,7 +36,7 @@ buffer_z: 3
 xval_n_lines: 25
 
 #geostat variables
-use_anisotropy: True
+use_anisotropy: False
 variogram_model_range_xy: 1000.0
 variogram_minor_range_xy_min: 100.0
 neighbourhood_dist_xy: 1000.0
@@ -59,3 +61,10 @@ aniso_pca_eig_ratio_min: 2.0
 aniso_pca_sampling_eig_min: 2.0
 aniso_pca_angle_diff_max: 15.0
 aniso_idw_k: 16
+
+# iMOD exports (written under dir_output)
+export:
+  idf:
+    enabled: true
+    properties: ["Q(0.5)"]
+    # layers: [1, 2, 3]  # optional subset for quick iMOD tests

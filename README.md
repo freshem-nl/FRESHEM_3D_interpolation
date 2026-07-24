@@ -1,14 +1,20 @@
 # FRESHEM 3D interpolation
 
-## NetCDF to iMOD IDF export
+## Modelling pipeline
 
-Standalone exporter for FRESHEM prediction NetCDF files.
+1. Copy `config.local.yaml.example` to `config.local.yaml` and set `dir_base`, `dir_input`
+2. Run `python main.py` from the repo root
 
-1. Copy `export_idf/config.local.yaml.example` to `export_idf/config.local.yaml`
-2. Set `paths.nc_file`, `paths.dst_dir`, `variables`, and `vertical_dim` (`z` or `layer`)
-3. Run `export_idf/main.py`
+With `export.idf.enabled: true`, postprocessing writes layer-coloured IDFs under `{dir_output}/idf/{property}/` (from `postproc.nc`).
 
-Output: `dst_dir/{var_folder}/idx_000_{var}_NAP_-50_00.idf` (bulk voxel export, default)
+## NetCDF to iMOD IDF export (standalone)
+
+Standalone exporter for FRESHEM prediction NetCDF files (re-export without re-running the model).
+
+1. Set `paths.nc_file` and `paths.dst_dir` in `export_idf/config.layer.yaml` (or `config.voxel.yaml`)
+2. Run `python export_idf/main.py --config config.layer.yaml`
+
+Output (layer-coloured): `dst_dir/{property}/NNN_layerLL_{top|prop|bottom}.idf`
 
 ## SkyTEM xyz to GeoPackage export
 
