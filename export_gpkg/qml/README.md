@@ -40,4 +40,4 @@ python snippets_chris/example_imod/leg/_gen_prob_legs.py
 - `gen_rho_qml.py` — writes both `.qml` files
 
 iMOD `.leg` files live in `snippets_chris/example_imod/leg/` (`rho_freshem`, `rho_zoet`, `rho_zout`).
-iMOD `.dlf` files live in `snippets_chris/example_imod/dlf/` (`rho_zoet`, `rho_zout`); IPF export also writes `rho_freshem.dlf` next to the IPF.
+iMOD `.dlf` files live in `snippets_chris/example_imod/dlf/` (`rho_zoet`, `rho_zout`).

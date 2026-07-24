@@ -61,14 +61,14 @@ def test_export_rho_ipf(tmp_path):
 
     assert result["ipf"] == ipf_path
     assert result["ipf"].is_file()
-    assert result["dlf"].is_file()
-    assert result["associated_dir"] == tmp_path / "soundings"
+    assert result["dlf"] is None
+    assert result["associated_dir"] == tmp_path / "sample"
 
     ipf_text = result["ipf"].read_text(encoding="utf-8").splitlines()
     assert ipf_text[0] == "4"
     assert ipf_text[1] == "6"
     assert ipf_text[8].startswith("3,txt")
-    assert ipf_text[9].split(",")[2] == r"soundings\L1_0001"
+    assert ipf_text[9].split(",")[2] == r"sample\L1_0001"
 
     txt = (result["associated_dir"] / "L1_0001.txt").read_text(encoding="utf-8").splitlines()
     assert txt[0] == "2"
@@ -77,10 +77,6 @@ def test_export_rho_ipf(tmp_path):
     assert '"rho",-999.99' in txt
     assert '"rho_class",-999.99' in txt
     assert txt[-1].endswith(",end,-")
-
-    dlf = result["dlf"].read_text(encoding="utf-8").splitlines()
-    assert dlf[0] == "Label,Ired,Igreen,Iblue,Label-text"
-    assert dlf[1].startswith('"0",')
 
 
 def test_export_rho_ipf_bbox(tmp_path):
@@ -93,13 +89,12 @@ def test_export_rho_ipf_bbox(tmp_path):
         ipf_path,
         bbox=[290, 360, 390, 460],
         apply_doi_clip=False,
-        write_dlf=False,
     )
 
     ipf_text = result["ipf"].read_text(encoding="utf-8").splitlines()
     assert ipf_text[0] == "2"
     assert len(list(result["associated_dir"].glob("L*_*.txt"))) == 2
-    assert ipf_text[9].split(",")[2] == r"soundings\L2_0001"
+    assert ipf_text[9].split(",")[2] == r"clipped\L2_0001"
 
 
 def test_export_rho_ipf_doi_clip(tmp_path):
@@ -107,7 +102,7 @@ def test_export_rho_ipf_doi_clip(tmp_path):
     ipf_path = tmp_path / "sample_doi.ipf"
     _write_sample_xyz(xyz_path, XYZ_DOI_SAMPLE)
 
-    result = export_rho_ipf(xyz_path, ipf_path, apply_doi_clip=True, write_dlf=False)
+    result = export_rho_ipf(xyz_path, ipf_path, apply_doi_clip=True)
 
     txt = (result["associated_dir"] / "L1_0001.txt").read_text(encoding="utf-8").splitlines()
     # one layer + end row
@@ -139,15 +134,14 @@ def test_export_rho_ipf_min_spacing(tmp_path):
         ipf_path,
         min_spacing_m=75,
         apply_doi_clip=False,
-        write_dlf=False,
     )
 
     assert result["ipf"].read_text(encoding="utf-8").splitlines()[0] == "4"
     assert len(list(result["associated_dir"].glob("L*_*.txt"))) == 4
     ids = [line.split(",")[2] for line in result["ipf"].read_text(encoding="utf-8").splitlines()[9:]]
     assert ids == [
-        r"soundings\L1_0001",
-        r"soundings\L1_0002",
-        r"soundings\L1_0003",
-        r"soundings\L2_0001",
+        r"spacing\L1_0001",
+        r"spacing\L1_0002",
+        r"spacing\L1_0003",
+        r"spacing\L2_0001",
     ]

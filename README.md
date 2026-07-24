@@ -28,8 +28,7 @@ Standalone exporter for raw SkyTEM rho inversion xyz files (borehole-style inspe
 3. Run `python export_ipf/main.py --config config.rho.yaml`
 
 Output:
-- `{name}.ipf` — sounding points; ID is `soundings\L{line}_{nnnn}` (Windows-style, like borehole IPFs)
-- `soundings/L{line}_{nnnn}.txt` — associated 1D logs (`topnap`, `rho`, `rho_class`)
-- `rho_freshem.dlf` — discrete Freshem rho legend for colouring `rho_class`
+- `{name}.ipf` — sounding points; ID is `{name}\L{line}_{nnnn}` (Windows-style, like borehole IPFs)
+- `{name}/L{line}_{nnnn}.txt` — associated 1D logs (`topnap`, `rho`, `rho_class`)
 
-Alternate iMOD rho legends (custom RGB, round bins): `rho_zoet` / `rho_zout` `.leg` + `.dlf` under `snippets_chris/example_imod/` (linear 0–100 / log 1–100).
+Use iMOD rho legends from `snippets_chris/example_imod/` (e.g. `rho_freshem`, `rho_zoet`, `rho_zout`).

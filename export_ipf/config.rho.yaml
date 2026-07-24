@@ -1,15 +1,15 @@
-# SkyTEM rho xyz -> iMOD IPF (associated 1D rho logs + DLF)
+# SkyTEM rho xyz -> iMOD IPF (associated 1D rho logs)
 # Run: python export_ipf/main.py --config config.rho.yaml
 # UNC paths: use single quotes or forward slashes
 #
 # Output layout (borehole-style, Windows backslash IDs):
 #   {name}.ipf
-#   soundings\L{line}_{nnnn}.txt
-#   rho_freshem.dlf
+#   {name}\L{line}_{nnnn}.txt
 
 paths:
-  xyz_file: '//tsn.tno.nl/RA-Data/Express/Datachris/Projecten/FreshEM_local/Interpolation/20260715_Noord_F_Noord_B2/Noord_F_proc_I02_doi_325m_MOD_inv.xyz'
-  ipf_file: 'C:/Temp_Geomodelling/FreshEM/ipf/lagenmodel/Noord_F_proc_I02_doi_325m_MOD_inv.ipf'
+  # xyz_file: '//tsn.tno.nl/RA-Data/Express/Datachris/Projecten/FreshEM_local/Interpolation/20260715_Noord_F_Noord_B2/Noord_F_proc_I02_doi_325m_MOD_inv.xyz'
+  xyz_file: "//tsn.tno.nl/RA-Data/Express/Datachris/Projecten/FreshEM_local/Interpolation/20260721_Verzamelinput/LCI_Sharp_MOD_inv.xyz"
+  ipf_file: '//tsn.tno.nl/RA-Data/Express/Datachris/Projecten/FreshEM_local/Interpolation/ipfs/LCI_Sharp_MOD_inv.ipf'
 
 # Optional XY clip: [xmin, xmax, ymin, ymax]. Omit or leave empty for full extent.
 # clip_bbox: [220000, 222000, 570000, 580000]
@@ -22,8 +22,5 @@ min_spacing_m: 75
 apply_doi_clip: true
 doi_name: doi_standard
 
-# Associated TXT folder next to the IPF (IDs become soundings\L{line}_{nnnn}).
-associated_dirname: soundings
-
-write_dlf: true
-dlf_name: rho_freshem.dlf
+# Associated TXT folder next to the IPF. Default: IPF stem ({name}\{id}.txt).
+# associated_dirname: Noord_F

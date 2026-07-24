@@ -187,8 +187,8 @@ def export_rho_ipf(
     min_spacing_m=None,
     apply_doi_clip=True,
     doi_name="doi_standard",
-    associated_dirname="soundings",
-    write_dlf=True,
+    associated_dirname=None,
+    write_dlf=False,
     dlf_name="rho_freshem.dlf",
 ):
     """Parse SkyTEM rho xyz and write an iMOD IPF + associated TXT logs.
@@ -198,11 +198,12 @@ def export_rho_ipf(
         {name}.ipf
         {associated_dirname}\\L{line}_{nnnn}.txt
 
-    IDs in the IPF use backslash separators, e.g. ``soundings\\L100_0001``.
+    By default ``associated_dirname`` is the IPF stem. IDs use backslash
+    separators, e.g. ``Noord_F\\L100_0001``.
     """
     xyz_path = Path(xyz_path)
     ipf_path = Path(ipf_path)
-    assoc_name = associated_dirname or "soundings"
+    assoc_name = associated_dirname or ipf_path.stem
     assoc_dir = ipf_path.parent / assoc_name
 
     if not xyz_path.is_file():
