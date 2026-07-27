@@ -1,0 +1,25 @@
+# Clay fraction from interpolated resistivity (Q50) -> IDF (+ optional NetCDF)
+# Run: python export_clay/main.py --config config.zuid_a1.yaml
+#
+# clay = a + b * rho, only where rho > rho_min (else nodata).
+# clip_to_unit: clip clay to [0, 1] after masking.
+
+paths:
+  nc_file: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_local\Interpolation\output\20260721 - geostat - rho - batch_test - Zuid_A1_proc_I01_MOD_inv\data\Zuid_A1_proc_I01_MOD_inv - postproc.nc'
+  dst_dir: '\\tsn.tno.nl\RA-Data\Express\Datachris\Projecten\FreshEM_local\Interpolation\idfs\Zuid_A1_proc_I01_MOD_inv\clay'
+  # nc_out: optional; default {dst_dir}/{postproc_stem} - clay.nc
+
+rho_var: "Q(0.5)"
+property_name: clay
+
+formula:
+  a: 1.17
+  b: -0.0163
+
+rho_min: 5.0
+clip_to_unit: true
+
+write_idf: true
+write_nc: true
+
+# layers: [1, 2, 3]  # optional subset for quick iMOD tests

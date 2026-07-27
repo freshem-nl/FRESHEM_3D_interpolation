@@ -16,6 +16,16 @@ Standalone exporter for FRESHEM prediction NetCDF files (re-export without re-ru
 
 Output (layer-coloured): `dst_dir/{property}/NNN_layerLL_{top|prop|bottom}.idf`
 
+## Clay from resistivity (standalone)
+
+Derive clay fraction from postproc `Q(0.5)` resistivity (Zuid-A1 regression) and export layer-coloured IDFs (primary) plus optional NetCDF.
+
+1. Set paths and options in `export_clay/config.zuid_a1.yaml` (`clip_to_unit`, `rho_min`, formula)
+2. Run `python export_clay/main.py --config config.zuid_a1.yaml`
+
+Output: `dst_dir/clay/NNN_layerLL_{top|clay|bottom}.idf` and `{dst_dir}/{postproc_stem} - clay.nc`.
+Formula: `clay = 1.17 - 0.0163 * rho`, masked where `rho <= 5` Ohm.m; optional clip to [0, 1].
+
 ## SkyTEM xyz to GeoPackage export
 
 Standalone exporter for raw SkyTEM rho inversion xyz files (pre-pipeline inspection in QGIS).
