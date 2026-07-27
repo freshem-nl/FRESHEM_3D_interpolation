@@ -45,8 +45,6 @@ def main(cfg):
         apply_doi_clip=cfg.get("apply_doi_clip", True),
         doi_name=cfg.get("doi_name", "doi_standard"),
         associated_dirname=cfg.get("associated_dirname"),
-        write_dlf=cfg.get("write_dlf", False),
-        dlf_name=cfg.get("dlf_name", "rho_freshem.dlf"),
     )
     print(f"done.\n...output in {result['ipf']}\n")
 

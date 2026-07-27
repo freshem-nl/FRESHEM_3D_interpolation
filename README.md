@@ -2,10 +2,10 @@
 
 ## Modelling pipeline
 
-1. Copy `config.local.yaml.example` to `config.local.yaml` and set `dir_base`, `dir_input`
+1. Copy `config.local.yaml.example` to `config.local.yaml` and set `dir_base`, `dir_input`, and `dir_imod`
 2. Run `python main.py` from the repo root
 
-With `export.idf.enabled: true`, postprocessing writes layer-coloured IDFs under `{dir_output}/idf/{property}/` (from `postproc.nc`). With `export.mdf.enabled: true`, MDFs follow immediately under `{dir_output}/mdf/`, embedding the chosen legend from `data/leg/`.
+With `export.idf.enabled: true`, postprocessing writes layer-coloured IDFs under `{dir_output}/idf/{property}/` (from `postproc.nc`). With `export.mdf.enabled: true`, MDFs follow under `{dir_output}/mdf/{property}_{input}.mdf`, embedding the chosen legend from `data/leg/`. MDF paths point to `{dir_imod}/idf/{property}/`, so copy `idf/` and `mdf/` from the run output into the iMOD project with the same relative layout.
 
 ## NetCDF to iMOD IDF export (standalone)
 
@@ -35,6 +35,7 @@ Standalone exporter for raw SkyTEM rho inversion xyz files (borehole-style inspe
 
 Output:
 - `{name}.ipf` — sounding points; ID is `{name}\L{line}_{nnnn}` (Windows-style, like borehole IPFs)
-- `{name}/L{line}_{nnnn}.txt` — associated 1D logs (`topnap`, `rho`, `rho_class`)
+- `{name}/L{line}_{nnnn}.txt` — associated 1D logs (`topnap`, `rho`, `rho_ohm`)
 
-Use iMOD rho legends from `snippets_chris/example_imod/` (e.g. `rho_freshem`, `rho_zoet`, `rho_zout`).
+`rho_ohm` is a 1 Ohm.m colour code (`round(rho)`, clipped to 1..150) for iMOD DLF matching.
+Use matching `rho_zoet` / `rho_zout` 1 Ohm.m DLF legends with the `rho_ohm` column.

@@ -1,9 +1,8 @@
-"""SkyTEM xyz -> iMOD IPF (point + associated 1D logs) + optional DLF legend."""
+"""SkyTEM xyz -> iMOD IPF (point + associated 1D logs)."""
 
 from __future__ import annotations
 
 import shutil
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -11,11 +10,17 @@ import pandas as pd
 
 from scripts.gpkg_export import clip_bbox, clip_doi, parse_skytem_xyz, z_doi_column
 
-_QML_DIR = Path(__file__).resolve().parent.parent / "export_gpkg" / "qml"
-if str(_QML_DIR) not in sys.path:
-    sys.path.insert(0, str(_QML_DIR))
+# Colour codes for iMOD DLF matching: one class per rounded Ohm.m.
+RHO_OHM_CODE_MIN = 1
+RHO_OHM_CODE_MAX = 150
 
-from rho_colormap import rho_freshem_classes, rho_to_class_index, write_rho_freshem_dlf  # noqa: E402
+
+def rho_to_ohm_code(rho, code_min=RHO_OHM_CODE_MIN, code_max=RHO_OHM_CODE_MAX):
+    """Map resistivity (Ohm.m) to a 1 Ohm.m IPF colour code (clipped integer)."""
+    if rho is None or (isinstance(rho, float) and np.isnan(rho)):
+        return None
+    return int(np.clip(np.round(float(rho)), code_min, code_max))
+
 
 
 def thin_min_spacing(df: pd.DataFrame, min_spacing_m) -> pd.DataFrame:
@@ -120,15 +125,18 @@ def _fmt(value) -> str:
     return str(value)
 
 
-def write_associated_txt(path: Path, layers: pd.DataFrame, classes) -> None:
-    """Write one iMOD associated TXT (itype=2) for a sounding."""
+def write_associated_txt(path: Path, layers: pd.DataFrame) -> None:
+    """Write one iMOD associated TXT (itype=2) for a sounding.
+
+    Columns: topnap, continuous rho, and rho_ohm (1..150) for DLF colouring.
+    """
     rows = []
     for _, row in layers.iterrows():
         rho = row["rho"]
         if pd.isna(rho):
             continue
-        cls = rho_to_class_index(float(rho), classes)
-        rows.append((_fmt(row["z_top"]), _fmt(rho), str(cls)))
+        ohm = rho_to_ohm_code(float(rho))
+        rows.append((_fmt(row["z_top"]), _fmt(rho), str(ohm)))
 
     if not rows:
         raise ValueError(f"No valid rho layers for {path.name}")
@@ -141,10 +149,11 @@ def write_associated_txt(path: Path, layers: pd.DataFrame, classes) -> None:
         "3,2",
         '"topnap",-999.99',
         '"rho",-999.99',
-        '"rho_class",-999.99',
+        '"rho_ohm",-999.99',
     ]
-    lines.extend(f"{top},{rho},{cls}" for top, rho, cls in rows)
+    lines.extend(f"{top},{rho},{ohm}" for top, rho, ohm in rows)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
 
 
 def write_ipf(path: Path, points: pd.DataFrame, assoc_col: int = 3) -> None:
@@ -188,8 +197,6 @@ def export_rho_ipf(
     apply_doi_clip=True,
     doi_name="doi_standard",
     associated_dirname=None,
-    write_dlf=False,
-    dlf_name="rho_freshem.dlf",
 ):
     """Parse SkyTEM rho xyz and write an iMOD IPF + associated TXT logs.
 
@@ -200,7 +207,11 @@ def export_rho_ipf(
 
     By default ``associated_dirname`` is the IPF stem. IDs use backslash
     separators, e.g. ``Noord_F\\L100_0001``.
+
+    Associated logs store continuous ``rho`` and ``rho_ohm`` (rounded Ohm.m,
+    clipped to 1..150) for iMOD DLF colouring.
     """
+
     xyz_path = Path(xyz_path)
     ipf_path = Path(ipf_path)
     assoc_name = associated_dirname or ipf_path.stem
@@ -245,7 +256,6 @@ def export_rho_ipf(
         shutil.rmtree(assoc_dir)
     assoc_dir.mkdir(parents=True, exist_ok=True)
 
-    classes = rho_freshem_classes()
     z_doi = z_doi_column(doi_name)
     doi_depth_col = doi_name if doi_name in df.columns else doi_name.replace("z_", "")
 
@@ -257,7 +267,7 @@ def export_rho_ipf(
             continue
         group = group.sort_values("layer")
         txt_path = assoc_dir / f"{sounding_id}.txt"
-        write_associated_txt(txt_path, group, classes)
+        write_associated_txt(txt_path, group)
         n_written += 1
 
         first = group.iloc[0]
@@ -281,10 +291,4 @@ def export_rho_ipf(
     write_ipf(ipf_path, points)
     print(f"Wrote {ipf_path} ({len(points):,} points, {n_written:,} associated TXT)")
 
-    dlf_path = None
-    if write_dlf:
-        dlf_path = ipf_path.with_name(dlf_name)
-        write_rho_freshem_dlf(dlf_path)
-        print(f"Wrote {dlf_path}")
-
-    return {"ipf": ipf_path, "associated_dir": assoc_dir, "dlf": dlf_path}
+    return {"ipf": ipf_path, "associated_dir": assoc_dir}

@@ -1,7 +1,13 @@
 """Tests for SkyTEM xyz -> iMOD IPF export."""
 
 from scripts.gpkg_export import parse_skytem_xyz
-from scripts.ipf_export import assign_sounding_ids, export_rho_ipf, layers_long, thin_min_spacing
+from scripts.ipf_export import (
+    assign_sounding_ids,
+    export_rho_ipf,
+    layers_long,
+    rho_to_ohm_code,
+    thin_min_spacing,
+)
 
 
 XYZ_SAMPLE = """\
@@ -52,6 +58,14 @@ def test_layers_long(tmp_path):
     assert {"z_top", "z_bottom", "rho", "elevation"}.issubset(long.columns)
 
 
+def test_rho_to_ohm_code():
+    assert rho_to_ohm_code(10.5) == 10
+    assert rho_to_ohm_code(10.6) == 11
+    assert rho_to_ohm_code(0.3) == 1
+    assert rho_to_ohm_code(200.0) == 150
+    assert rho_to_ohm_code(float("nan")) is None
+
+
 def test_export_rho_ipf(tmp_path):
     xyz_path = tmp_path / "sample.xyz"
     ipf_path = tmp_path / "sample.ipf"
@@ -61,8 +75,8 @@ def test_export_rho_ipf(tmp_path):
 
     assert result["ipf"] == ipf_path
     assert result["ipf"].is_file()
-    assert result["dlf"] is None
     assert result["associated_dir"] == tmp_path / "sample"
+    assert "dlf" not in result
 
     ipf_text = result["ipf"].read_text(encoding="utf-8").splitlines()
     assert ipf_text[0] == "4"
@@ -75,7 +89,9 @@ def test_export_rho_ipf(tmp_path):
     assert txt[1] == "3,2"
     assert '"topnap",-999.99' in txt
     assert '"rho",-999.99' in txt
-    assert '"rho_class",-999.99' in txt
+    assert '"rho_ohm",-999.99' in txt
+    # RHO_1 = 10.5 -> ohm code 10
+    assert txt[5] == "5,10.5,10"
     assert txt[-1].endswith(",end,-")
 
 
