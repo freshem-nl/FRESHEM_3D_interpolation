@@ -38,4 +38,6 @@ Output:
 - `{name}/L{line}_{nnnn}.txt` — associated 1D logs (`topnap`, `rho`, `rho_ohm`)
 
 `rho_ohm` is a 1 Ohm.m colour code (`round(rho)`, clipped to 1..150) for iMOD DLF matching.
-Use matching `rho_zoet` / `rho_zout` 1 Ohm.m DLF legends with the `rho_ohm` column.
+Generate matching DLFs with `python snippets_chris/scripts/write_rho_1ohm_dlf.py`
+(`snippets_chris/example_imod/dlf/rho_zoet_1ohm.dlf`, `rho_zout_1ohm.dlf`). Colour the
+associated log on column `rho_ohm`.
