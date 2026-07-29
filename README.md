@@ -7,6 +7,8 @@
 
 With `export.idf.enabled: true`, postprocessing writes layer-coloured IDFs under `{dir_output}/idf/{property}/` (from `postproc.nc`). With `export.mdf.enabled: true`, MDFs follow under `{dir_output}/mdf/{property}_{input}.mdf`, embedding the chosen legend from `data/leg/`. MDF paths point to `{dir_imod}/idf/{property}/`, so copy `idf/` and `mdf/` from the run output into the iMOD project with the same relative layout.
 
+For QGIS map views, prefer the GeoTIFFs under `{dir_output}/rasters/` (see `export_gpkg/qml/`). NetCDFs written by `write.dataset` include CF spatial metadata (EPSG from `spatial_ref`); older files may still open without CRS.
+
 ## NetCDF to iMOD IDF export (standalone)
 
 Standalone exporter for FRESHEM prediction NetCDF files (re-export without re-running the model).

@@ -20,8 +20,38 @@ def table(data, path):
         data.to_csv(path)
 
 def dataset(ds, path):
+    """Write NetCDF with CF spatial metadata so GDAL/QGIS pick up CRS and geotransform."""
+    ds = ds.copy(deep=False)
 
     encoding = {v: {"zlib": True, "complevel": 4} for v in ds.data_vars}
+
+    # Coordinate axes must not carry _FillValue (GDAL ignores axes that do)
+    for name, standard_name, axis in (
+        ("x", "projection_x_coordinate", "X"),
+        ("y", "projection_y_coordinate", "Y"),
+    ):
+        if name not in ds.coords:
+            continue
+        ds[name].attrs.setdefault("units", "m")
+        ds[name].attrs.setdefault("standard_name", standard_name)
+        ds[name].attrs.setdefault("axis", axis)
+        encoding[name] = {"_FillValue": None}
+
+    if "layer" in ds.coords:
+        encoding["layer"] = {"_FillValue": None}
+
+    if "z" in ds.coords:
+        ds["z"].attrs.setdefault("units", "m")
+        ds["z"].attrs.setdefault("positive", "up")
+        encoding["z"] = {"_FillValue": None}
+
+    # Link variables to CRS; drop rioxarray's misleading coordinates=spatial_ref
+    if "spatial_ref" in ds.coords or "spatial_ref" in ds.variables:
+        for var in ds.data_vars:
+            ds[var].attrs["grid_mapping"] = "spatial_ref"
+            if ds[var].attrs.get("coordinates") == "spatial_ref":
+                del ds[var].attrs["coordinates"]
+        ds.attrs.setdefault("grid_mapping", "spatial_ref")
 
     path = path.with_suffix(".nc")
     path.parent.mkdir(parents=True, exist_ok=True)
