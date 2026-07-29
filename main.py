@@ -139,9 +139,29 @@ def main(cfg):
             raise ValueError("export.idf.properties must be set when export.mdf.enabled")
         if not legend_name:
             raise ValueError("export.mdf.legend must be set when export.mdf.enabled")
+        if "dir_imod" not in cfg:
+            raise FileNotFoundError(
+                "dir_imod must be set in config.local.yaml when export.mdf.enabled"
+            )
         leg_path = cfg["dir_leg"] / legend_name
+        name_suffix = Path(cfg["data_input"]).stem
+        # FreshEM iMOD layout: idf/lagenmodel/{survey}/{Variable}/{property}/
+        mdf_idf_root = (
+            cfg["dir_imod"]
+            / "idf"
+            / "lagenmodel"
+            / name_suffix
+            / str(cfg["variable_name"]).capitalize()
+        )
         print(f"\nexport MDF to {cfg['dir_mdf']}...", end=" ")
-        mdf_export.export_mdfs(cfg["dir_idf"], cfg["dir_mdf"], properties, leg_path)
+        mdf_export.export_mdfs(
+            cfg["dir_idf"],
+            cfg["dir_mdf"],
+            properties,
+            leg_path,
+            mdf_idf_root,
+            name_suffix,
+        )
         print("done.")
 
     preprocessing_data()

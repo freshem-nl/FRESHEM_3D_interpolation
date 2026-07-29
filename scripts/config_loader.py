@@ -55,6 +55,8 @@ def load_config(path="config.yaml", data_input=None):
     cfg["dir_idf"] = cfg["dir_output"] / "idf"
     cfg["dir_mdf"] = cfg["dir_output"] / "mdf"
     cfg["dir_leg"] = Path(__file__).resolve().parent.parent / "data" / "leg"
+    if cfg.get("dir_imod"):
+        cfg["dir_imod"] = Path(cfg["dir_imod"])
     cfg["path_input"] = cfg["dir_input"] / cfg["data_input"]
 
     # temp files

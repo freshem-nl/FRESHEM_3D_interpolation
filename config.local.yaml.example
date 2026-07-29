@@ -2,3 +2,7 @@
 dir_base: "path/to/your/data/root"
 dir_input: "relative/subfolder/under/dir_base"
 # dir_output_base: "path/to/output/root"  # optional; defaults to dir_base/output
+# iMOD project root (required when export.mdf.enabled).
+# MDF IDF paths: {dir_imod}/idf/lagenmodel/{input}/{Variable}/{property}/
+# Paste MDFs into {dir_imod}/mdf/ and IDFs into that lagenmodel folder.
+# dir_imod: "C:/Temp_Geomodelling/FreshEM"

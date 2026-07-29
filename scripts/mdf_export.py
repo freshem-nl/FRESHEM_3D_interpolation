@@ -47,23 +47,29 @@ def _read_leg(leg_path: Path) -> str:
     return text if text.endswith("\n") else text + "\n"
 
 
-def export_mdf(idf_dir: Path, mdf_path: Path, leg_path: Path) -> Path:
+def export_mdf(
+    idf_dir: Path,
+    mdf_path: Path,
+    leg_path: Path,
+    mdf_idf_dir: Path | None = None,
+) -> Path:
     """Write one MDF for an IDF property folder, embedding the given .leg palette."""
     idf_dir = Path(idf_dir).resolve()
+    mdf_idf_dir = Path(mdf_idf_dir) if mdf_idf_dir else idf_dir
     mdf_path = Path(mdf_path)
     leg_block = _read_leg(Path(leg_path))
     filenames = _load_order_filenames(idf_dir)
 
     blocks = []
     for fname in filenames:
-        idf_path = (idf_dir / fname).resolve()
-        if not idf_path.is_file():
-            raise FileNotFoundError(f"IDF listed in load order not found: {idf_path}")
+        source_idf_path = (idf_dir / fname).resolve()
+        if not source_idf_path.is_file():
+            raise FileNotFoundError(f"IDF listed in load order not found: {source_idf_path}")
         role = _idf_role(fname)
         style = _style_for_role(role)
         entry_id = zlib.crc32(fname.encode("utf-8")) & 0x7FFFFFFF
         # iMOD on Windows expects backslash paths in MDF entries.
-        abs_path = str(idf_path).replace("/", "\\")
+        abs_path = str(mdf_idf_dir / fname).replace("/", "\\")
         blocks.append(
             f'"{abs_path}","{fname}",{entry_id},{style},0\n{leg_block}'
         )
@@ -74,7 +80,14 @@ def export_mdf(idf_dir: Path, mdf_path: Path, leg_path: Path) -> Path:
     return mdf_path
 
 
-def export_mdfs(dir_idf: Path, dir_mdf: Path, properties: list[str], leg_path: Path) -> list[Path]:
+def export_mdfs(
+    dir_idf: Path,
+    dir_mdf: Path,
+    properties: list[str],
+    leg_path: Path,
+    mdf_idf_root: Path | None = None,
+    name_suffix: str | None = None,
+) -> list[Path]:
     """Write one MDF per property under dir_mdf, from matching IDF subfolders."""
     if not properties:
         raise ValueError("properties must contain at least one variable name")
@@ -83,6 +96,8 @@ def export_mdfs(dir_idf: Path, dir_mdf: Path, properties: list[str], leg_path: P
     for property_name in properties:
         token = var_token(property_name)
         idf_dir = Path(dir_idf) / token
-        mdf_path = Path(dir_mdf) / f"{token}.mdf"
-        written.append(export_mdf(idf_dir, mdf_path, leg_path))
+        mdf_name = f"{token}_{name_suffix}.mdf" if name_suffix else f"{token}.mdf"
+        mdf_path = Path(dir_mdf) / mdf_name
+        mdf_idf_dir = Path(mdf_idf_root) / token if mdf_idf_root else None
+        written.append(export_mdf(idf_dir, mdf_path, leg_path, mdf_idf_dir))
     return written

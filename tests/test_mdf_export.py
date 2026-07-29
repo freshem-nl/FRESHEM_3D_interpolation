@@ -65,7 +65,24 @@ def test_export_mdfs_writes_one_per_property(tmp_path):
         encoding="utf-8",
     )
 
-    written = export_mdfs(dir_idf, tmp_path / "mdf", ["Q(0.5)"], leg_path)
+    imod_idf_root = Path(
+        "C:/Temp_Geomodelling/FreshEM/idf/lagenmodel/LCI_Sharp_MOD_inv/Rho"
+    )
+    written = export_mdfs(
+        dir_idf,
+        tmp_path / "mdf",
+        ["Q(0.5)"],
+        leg_path,
+        imod_idf_root,
+        name_suffix="LCI_Sharp_MOD_inv",
+    )
     assert len(written) == 1
-    assert written[0].name == "Q_0_5.mdf"
+    assert written[0].name == "Q_0_5_LCI_Sharp_MOD_inv.mdf"
     assert written[0].is_file()
+
+    text = written[0].read_text(encoding="utf-8")
+    assert (
+        "C:\\Temp_Geomodelling\\FreshEM\\idf\\lagenmodel\\"
+        "LCI_Sharp_MOD_inv\\Rho\\Q_0_5" in text
+    )
+    assert str(dir_idf) not in text
