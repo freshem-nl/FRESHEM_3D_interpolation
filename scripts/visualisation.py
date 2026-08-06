@@ -31,7 +31,8 @@ def plot_df(df, name, cfg):
 
         histogram(df[var], path, cfg)
 
-        if var == cfg["variable_name"]:
+        # per-layer hists for the main variable and its stddev column
+        if var in (cfg["variable_name"], f"{cfg['variable_name']}_std") and "layer" in df.columns:
             for layer in df["layer"].unique():
                 path = dir_plot / f"{name} - {var} - layer {layer}.png"
                 histogram(df[df["layer"] == layer][var], path, cfg)
